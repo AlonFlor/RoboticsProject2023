@@ -1,6 +1,8 @@
 # RoboticsProject2023
 
 
+## Old simulations folder
+
 The old simulations folder contains simulations where a robot arm or related placeholder end effector pushes an object, and a regressions are done on the collected data to estimate the friction torque and center of mass. The data is time step by time step.
 
 rigid_body_pybullet_sim.py uses a simulated robot arm to push the object. I found that it is more difficult to control the simulated arm than the real one, and this simulation was unsuccessful.
@@ -18,3 +20,6 @@ Even though quasistatic_rigid_body_pybullet_sim_2.py was somewhat successful, I 
 
 
 Current plan: make a modified version of quasistatic_rigid_body_pybullet_sim_2.py. Instead of regressions, my model will try to predict motion in the form of the interpolated data. The interpolated data assumes no changes to velocity nor to angular velocity, and although my previous simulations show that this quasi-static assumption is doubtful, I figure that I might as well stick with it for the purpose of replicating Changkyu's method in simulation. I can have a graph showing the interpolated and actual data on top of each other, and perhaps use the gap introduced by the quasi-static assumption to refine the model.
+
+
+The models should be able to run by calling them from any software that runs Python 3 (Python 3.9 is the version used to program the simulations in PyCharm). The requisite libraries are numpy, sk_learn, os, time, PyBullet, and matplotlib.
