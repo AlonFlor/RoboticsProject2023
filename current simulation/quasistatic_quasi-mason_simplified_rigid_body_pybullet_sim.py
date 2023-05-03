@@ -124,7 +124,7 @@ def get_object_link_position(index):
 
 
 
-def find_optimal_new_pushing_points_and_split_candidate_list(candidate_region_link_indices, push_axis):
+def find_optimal_new_pushing_points_and_split_candidate_list(candidate_region_link_indices):
     """Given a list of links indices that make up a region where the center of mass could be, finds its geometric center.
      Then, find candidate start and end points for pushing by dissecting that region through the center."""
 
@@ -140,13 +140,37 @@ def find_optimal_new_pushing_points_and_split_candidate_list(candidate_region_li
         center += locations[index]
     center /= len(candidate_region_link_indices)
 
-
+    #get rotated object axes for the present configuration
     object_main_axis = get_rotated_object_axis(object_original_main_axis)
     object_second_axis = get_rotated_object_axis(object_original_second_axis)
-    #p.addUserDebugLine((0.,0.,0.), tuple(object_main_axis), (1.,0.,0.), .2, 10.)
-    #p.addUserDebugLine((0.,0.,0.), tuple(object_second_axis), (0.,1.,0.), .2, 10.)
 
-    if push_axis == 0:
+    #find the optimal push axis, depending on the shape of the candidate region
+    loc = locations[candidate_region_link_indices[0]]
+    candidate_region_link_indices_min_main_axis = np.dot(loc, object_main_axis)
+    candidate_region_link_indices_max_main_axis = np.dot(loc, object_main_axis)
+    candidate_region_link_indices_min_second_axis = np.dot(loc, object_second_axis)
+    candidate_region_link_indices_max_second_axis = np.dot(loc, object_second_axis)
+    for index in candidate_region_link_indices[1:]:
+        loc = locations[index]
+        loc_main_axis = np.dot(loc, object_main_axis)
+        loc_second_axis = np.dot(loc, object_second_axis)
+        if loc_main_axis < candidate_region_link_indices_min_main_axis:
+            candidate_region_link_indices_min_main_axis = loc_main_axis
+        elif loc_main_axis > candidate_region_link_indices_max_main_axis:
+            candidate_region_link_indices_max_main_axis = loc_main_axis
+        if loc_second_axis < candidate_region_link_indices_min_second_axis:
+            candidate_region_link_indices_min_second_axis = loc_second_axis
+        elif loc_second_axis > candidate_region_link_indices_max_second_axis:
+            candidate_region_link_indices_max_second_axis = loc_second_axis
+    candidate_region_main_axis_span = candidate_region_link_indices_max_main_axis - candidate_region_link_indices_min_main_axis
+    candidate_region_second_axis_span = candidate_region_link_indices_max_second_axis - candidate_region_link_indices_min_second_axis
+    if candidate_region_main_axis_span > candidate_region_second_axis_span:
+        chosen_axis = 0
+    else:
+        chosen_axis = 1
+
+    #find pusher start and end points
+    if chosen_axis == 0:
         min_second_axis = get_object_link_position(min_second_axis_link_index)
         max_second_axis = get_object_link_position(max_second_axis_link_index)
 
@@ -156,20 +180,20 @@ def find_optimal_new_pushing_points_and_split_candidate_list(candidate_region_li
         min_main_axis = get_object_link_position(min_main_axis_link_index)
         max_main_axis = get_object_link_position(max_main_axis_link_index)
 
-        new_pusher_start = center + (np.dot(max_main_axis-center,object_main_axis)+0.05)*object_main_axis
+        new_pusher_start = center + (np.dot(max_main_axis-center,object_main_axis)+0.05) * object_main_axis
         new_pusher_end = center + (np.dot(min_main_axis-center,object_main_axis)-0.05) * object_main_axis
 
     #p.addUserDebugPoints([tuple(new_pusher_start), tuple(new_pusher_end)], [(1.,0.,0.),(0.,1.,0.)], 2.)
 
 
-    # split candidate_region_link_indices depending on the side of the axis the link is in
+    # split candidate_region_link_indices depending on the side of the pushing axis the link is in
     candidate_region_right_link_indices = []
     candidate_region_left_link_indices = []
-    axis = new_pusher_end - new_pusher_start
+    push_axis = new_pusher_end - new_pusher_start
     for index in candidate_region_link_indices:
         # make the determination which region to add the link to
-        add_link_to_candidate_region_1 = np.sign(np.cross(locations[index] - new_pusher_start, axis)[2])
-        if add_link_to_candidate_region_1 > 0:
+        add_link_to_candidate_region_right = np.sign(np.cross(locations[index] - new_pusher_start, push_axis)[2])
+        if add_link_to_candidate_region_right > 0:
             candidate_region_right_link_indices.append(index)
         else:
             candidate_region_left_link_indices.append(index)
@@ -178,10 +202,7 @@ def find_optimal_new_pushing_points_and_split_candidate_list(candidate_region_li
 
 
 
-def push_object(pusher_end, out_dir):
-
-    #get the video
-    loggerID = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, os.path.join(out_dir, "video.mp4"))
+def push_object(pusher_end):
 
     test_point_velocities = []
     angles = []
@@ -234,25 +255,23 @@ def push_object(pusher_end, out_dir):
 
         #reset the pusher
         pusher_position = p.getBasePositionAndOrientation(pusherID)[0]
+        pusher_position = (pusher_position[0], pusher_position[1], pusher_end[2]) #keep the height constant
         p.resetBasePositionAndOrientation(pusherID, pusher_position, (0.,0.,0.,1.))
         pusher_displacement_from_destination = pusher_end - np.array(pusher_position)
         pusher_dist_from_destination = np.linalg.norm(pusher_displacement_from_destination)
-        pusher_speed = .05
+        pusher_speed = .15
         new_pusher_velocity = pusher_speed * pusher_displacement_from_destination/pusher_dist_from_destination
         p.resetBaseVelocity(pusherID, (new_pusher_velocity[0], new_pusher_velocity[1], new_pusher_velocity[2]), (0., 0., 0.))
         p.applyExternalForce(pusherID, -1, (0., 0., 9.8), (0.,0.,0.), p.LINK_FRAME) #antigravity
-
-
-    p.stopStateLogging(loggerID)
 
     return angles, test_point_velocities, angular_velocities
 
 
 
-def get_push_sample(pusher_start, pusher_end, test_dir, push_number):
-    #make directories for files for this sample
-    push_file_dir = os.path.join(test_dir, "push_"+str(push_number))
-    os.mkdir(push_file_dir)
+def get_push_sample(pusher_start, pusher_end):#, test_dir, push_number):
+    ##make directories for files for this sample
+    #push_file_dir = os.path.join(test_dir, "push_"+str(push_number))
+    #os.mkdir(push_file_dir)
 
     #get initial object angle
     old_angle = p.getEulerFromQuaternion(p.getBasePositionAndOrientation(objectID)[1])[2]
@@ -261,7 +280,7 @@ def get_push_sample(pusher_start, pusher_end, test_dir, push_number):
     p.resetBasePositionAndOrientation(pusherID, (pusher_start[0], pusher_start[1], pusher_start[2]), (0., 0., 0., 1.))
 
     #push the object and plot stuff
-    angles, test_point_velocities, angular_velocities = push_object(pusher_end, push_file_dir)
+    angles, test_point_velocities, angular_velocities = push_object(pusher_end)
     #draw_data.plot_variable_vs_time(angles, "angle", push_file_dir)
     #draw_data.plot_variable_vs_time(test_point_velocities, "velocity of test point", push_file_dir)
     #draw_data.plot_variable_vs_time(angular_velocities, "angular velocity", push_file_dir)
@@ -269,7 +288,13 @@ def get_push_sample(pusher_start, pusher_end, test_dir, push_number):
 
     new_angle = p.getEulerFromQuaternion(p.getBasePositionAndOrientation(objectID)[1])[2]
 
-    return new_angle - old_angle
+    angular_displacement = new_angle - old_angle
+    if angular_displacement < -3*np.pi/4:
+        angular_displacement += 2*np.pi
+    elif angular_displacement > 3*np.pi/4:
+        angular_displacement -= 2*np.pi
+
+    return angular_displacement
 
 
 
@@ -369,26 +394,34 @@ def run_full_test(object_name):
         if index not in candidate_region_link_indices:
             p.changeVisualShape(objectID, index, rgbaColor=(0., 0., 0., 1.))
 
+    #set up results file
+    results_file = open(os.path.join(test_dir, "results_file.txt"), "w")
+
     pusher_height_disp = startPos[2]+0.05
     push_count = 0
-    object_push_axis = 1
+
+    #set up the camera and start logging the video
+    set_up_camera(p.getBasePositionAndOrientation(objectID)[0])
+    loggerID = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, os.path.join(test_dir, "video.mp4"))
 
     while len(candidate_region_link_indices) > 1:
-        # set up the camera
+        # reset the camera
         set_up_camera(p.getBasePositionAndOrientation(objectID)[0])
 
         push_count += 1
-        object_push_axis = 1 - object_push_axis
 
         #find the best start and end pushing points to dissect the current candidate region.
         #also make two candidate lists from the current list, as split by the axis formed by the start and end pushing points
         candidate_region_right_link_indices, candidate_region_left_link_indices, pusher_start, pusher_end = \
-            find_optimal_new_pushing_points_and_split_candidate_list(candidate_region_link_indices, object_push_axis)
+            find_optimal_new_pushing_points_and_split_candidate_list(candidate_region_link_indices)
         pusher_start[2] = pusher_height_disp
         pusher_end[2] = pusher_height_disp
 
         #push the object and get the angular displacement
-        angular_displacement = get_push_sample(pusher_start, pusher_end, test_dir, push_count)
+        angular_displacement = get_push_sample(pusher_start, pusher_end)#, test_dir, push_count)
+
+        #write to results file
+        results_file.write("push"+str(push_count)+":\n\tangular displacement = " + str(angular_displacement) + "\n\n")
 
         #check which candidate region can contain the center of mass, based on the angular displacement.
         if angular_displacement <= 0.:
@@ -404,14 +437,27 @@ def run_full_test(object_name):
         for index in rejected_links:
             p.changeVisualShape(objectID, index, rgbaColor=(0., 0., 0., 1.))
 
+        #wait for a bit
+        time_extra = 0.5
+        while time_extra > 0:
+            p.resetBaseVelocity(pusherID, (0., 0., 0.), (0., 0., 0.))
+            p.applyExternalForce(pusherID, -1, (0., 0., 9.8), (0.,0.,0.), p.LINK_FRAME) #antigravity
+
+            time_extra -= dt
+            p.stepSimulation()
+            time.sleep(dt)
+
+    #stop logging the video
+    p.stopStateLogging(loggerID)
+
+    #write down results
     p.resetBasePositionAndOrientation(objectID, startPos, startOrientation)
     found_com = get_object_link_position(candidate_region_link_indices[0])
-    print("found_com", found_com[:2])
-    print("actual_com",actual_com[:2])
+    com_error = np.linalg.norm(found_com[:2]-actual_com[:2])
 
-    results_file = open(os.path.join(test_dir, "results_file.txt"), "w")
-    results_file.write("found_com:\t" + str(found_com[:2]) + "\n")
-    results_file.write("actual_com:\t" + str(actual_com[:2]) + "\n")
+    results_file.write("found COM:\t" + str(found_com[:2]) + "\n")
+    results_file.write("actual COM:\t" + str(actual_com[:2]) + "\n")
+    results_file.write("COM error:\t" + str(com_error) + "\n")
     results_file.close()
 
 
