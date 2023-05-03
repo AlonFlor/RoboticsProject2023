@@ -19,7 +19,6 @@ Even though quasistatic_rigid_body_pybullet_sim_2.py was somewhat successful, I 
 
 
 
-Current plan: make a modified version of quasistatic_rigid_body_pybullet_sim_2.py. Instead of regressions, my model will try to predict motion in the form of the interpolated data. The interpolated data assumes no changes to velocity nor to angular velocity, and although my previous simulations show that this quasi-static assumption is doubtful, I figure that I might as well stick with it for the purpose of replicating Changkyu's method in simulation. I can have a graph showing the interpolated and actual data on top of each other, and perhaps use the gap introduced by the quasi-static assumption to refine the model.
-
+## Running the files
 
 The models should be able to run by calling them from any software that runs Python 3 (Python 3.9 is the version used to program the simulations in PyCharm). The requisite libraries are numpy, sk_learn, os, time, PyBullet, and matplotlib.
