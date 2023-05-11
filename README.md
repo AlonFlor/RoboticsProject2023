@@ -4,12 +4,15 @@
 
 The programs in the current simulation folder are
 
+- quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py
 - process_robot_lab_data.py
 - YCB_push_several_COMs.py
 - YCB_push_several_masses.py
 - YCB_several_pushes.py
 
 All of them involve a cylindrical pusher that executes quasi-static pushes on various rigid body objects.
+
+quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py takes the text files from the object models folder and expands them into rigid body objects consisting of cubes linked together by fixed joints. Initially, all cubes are candidates for the location of the object's center of mass. At each loop, the simulation takes the region of candidate cubes and plots a pushing course that splits the region in half. The pusher then pushes the object along the course. Based on the object's direction, the center of mass cannot be in one of the halves, so the cubes in the ineligible half are remved from the candidate list. This is repeated until there is one cube remaining, its center is the simulation's candidate center of mass. The estimated center of mass is then compared to the ground truth center of mass. Results show good agreement between those two values for the simulated objects. The idea of using rotations and pushing courses to eliminate candidate regions and isolate the center of mass is based on Mason's voting theorem, but this version uses only the push direction, without taking the friction cone into account.
 
 process_robot_lab_data.py takes data from the real life robot, which consists of end effector coordinates, forces (so far unused), and two poses of an object. The poses are before and after a push, while the end effector coordinates were recorded before, during, and after the same push. The frame-by-frame object poses are interpolated and displayed, while the robot end effector is simulated by the cylindrical pusher. This work is incomplete, since the start time of the object pose is calculated by taking the minimum pusher z-coordinate (height), and the end effector coordinates are of the robot arm's hand rather than its finger.
 
@@ -37,4 +40,4 @@ Even though quasistatic_rigid_body_pybullet_sim_2.py was somewhat successful, I 
 
 ## Running the files
 
-The models should be able to run by calling them from any software that runs Python 3 (Python 3.9 is the version used to program the simulations in PyCharm). The requisite libraries are numpy, os, PyBullet, and PIL. The simulations in the old simulations folder do not require PIL, but do require time, sk_learn, and matplotlib.
+The models should be able to run by calling them from any software that runs Python 3 (Python 3.9 is the version used to program the simulations in PyCharm). The requisite libraries are numpy, os, PyBullet, and PIL. The simulations in the old simulations folder do not require PIL, but do require time, sk_learn, and matplotlib. quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py also requires the time library.
