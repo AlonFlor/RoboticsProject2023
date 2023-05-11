@@ -265,7 +265,7 @@ def run_full_test(object_name):
 
     #load plane
     global planeID
-    planeID = p.loadURDF(os.path.join("object models",os.path.join("plane","plane.urdf")), useFixedBase=True)
+    planeID = p.loadURDF(os.path.join("object models","plane","plane.urdf"), useFixedBase=True)
     p.changeVisualShape(planeID, -1, rgbaColor=(0., 0., 0.9, 1.))
 
     #load pusher

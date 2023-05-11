@@ -124,7 +124,7 @@ def push(pusher_end, pusherID, object_IDs, dt, fps, view_matrix, proj_matrix, im
         p.resetBasePositionAndOrientation(pusherID, pusher_position, (0., 0., 0., 1.))
         pusher_displacement_from_destination = pusher_end - np.array(pusher_position)
         pusher_dist_from_destination = np.linalg.norm(pusher_displacement_from_destination)
-        pusher_speed = .15
+        pusher_speed = .1
         new_pusher_velocity = pusher_speed * pusher_displacement_from_destination / pusher_dist_from_destination
         p.resetBaseVelocity(pusherID, (new_pusher_velocity[0], new_pusher_velocity[1], new_pusher_velocity[2]), (0., 0., 0.))
         p.applyExternalForce(pusherID, -1, (0., 0., 9.8), (0., 0., 0.), p.LINK_FRAME)  # antigravity

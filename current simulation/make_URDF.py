@@ -75,7 +75,7 @@ def write_URDF_from_text_file(object_name, destination_folder):
 def write_URDF_from_mesh(object_name, destination_folder, model_COM, extra_designation=""):
     indent = 0
     object_model_folder = os.path.join("object models",object_name)
-    object_mesh_file = os.path.join("..",os.path.join(object_model_folder, object_name+".obj"))
+    object_mesh_file = os.path.join("..",object_model_folder, object_name+".obj")
 
     urdf_str = "<robot name = \"" + object_name + "\">\n"
     indent += 1
