@@ -2,6 +2,7 @@ import random
 
 import pybullet as p
 import numpy as np
+import pybullet_utilities as p_utils
 import draw_data
 import make_URDF
 
@@ -12,75 +13,6 @@ import time
 
 
 
-def set_up_camera(pos):
-    #from https://github.com/changkyu/iros2020_changkyu/blob/master/software/simulator/SimBullet.py
-
-    distance = 0.75
-    yaw = 45
-    pitch = -35.
-    view_matrix = p.computeViewMatrixFromYawPitchRoll(cameraTargetPosition=pos,
-                                        distance=distance,
-                                        yaw=yaw,
-                                        pitch=pitch,
-                                        roll=0,
-                                        upAxisIndex=2)
-    proj_matrix = p.computeProjectionMatrixFOV(fov=53.130,
-                                 aspect= 640. / 480.,
-                                 nearVal=0.001,
-                                 farVal=100.0)
-
-    p.resetDebugVisualizerCamera(distance, yaw, pitch, pos)
-
-    return view_matrix, proj_matrix
-
-
-
-
-
-def get_actual_mass_com_cof_and_moment_of_inertia():
-    #count = 1
-    masses = []
-    mass, friction = p.getDynamicsInfo(objectID, -1)[:2] #base mass and friction
-    mass_times_friction = mass * friction
-    masses.append(mass)
-
-    loc = np.array(p.getBasePositionAndOrientation(objectID)[0]) #base location
-    loc_weighed_mass = masses[0] * loc
-    loc_weighed_mass_times_friction = mass_times_friction * loc
-
-    for i in range(num_links):
-        this_mass, this_friction = p.getDynamicsInfo(objectID, i)[:2]
-        masses.append(this_mass)
-        mass += this_mass
-        this_mass_times_friction = this_mass*this_friction
-        mass_times_friction += this_mass_times_friction
-
-        this_loc = np.array(p.getLinkState(objectID, i)[0])
-        loc_weighed_mass += this_loc * this_mass
-        loc_weighed_mass_times_friction += this_loc * this_mass_times_friction
-
-        #count += 1
-    com = loc_weighed_mass/mass
-    cof = loc_weighed_mass_times_friction/mass_times_friction
-
-    object_scale_factor = object_scale**2
-    I = object_scale_factor*masses[0]/6. + masses[0]*(np.linalg.norm(np.array(p.getBasePositionAndOrientation(objectID)[0]) - com)**2)
-    for i in range(num_links):
-        #print("I",I)
-        I += object_scale_factor*masses[i+1]/6. + masses[i+1]*(np.linalg.norm(np.array(p.getLinkState(objectID, i)[0]) - com) ** 2)
-
-
-    '''other_I = p.getDynamicsInfo(objectID,-1)[2][1] + masses[0]*(np.linalg.norm(np.array(p.getBasePositionAndOrientation(objectID)[0]) - com)**2)
-    for i in range(num_links):
-        print("other I", other_I,p.getDynamicsInfo(objectID,i)[2])
-        other_I += p.getDynamicsInfo(objectID,i)[2][1] + masses[i+1]*(np.linalg.norm(np.array(p.getLinkState(objectID, i)[0]) - com) ** 2)
-    print("\n\n\n")
-    print("object_scale",object_scale)
-    print("I",I)
-    print("other I",other_I)
-    exit()'''
-
-    return mass, com, cof, I
 
 
 
@@ -333,7 +265,7 @@ def run_full_test(object_name):
 
     #load plane
     global planeID
-    planeID = p.loadURDF("plane.urdf", useFixedBase=True)
+    planeID = p.loadURDF(os.path.join("object models",os.path.join("plane","plane.urdf")), useFixedBase=True)
     p.changeVisualShape(planeID, -1, rgbaColor=(0., 0., 0.9, 1.))
 
     #load pusher
@@ -379,7 +311,7 @@ def run_full_test(object_name):
     global actual_com
     global actual_cof
     global actual_I
-    actual_mass, actual_com, actual_cof, actual_I = get_actual_mass_com_cof_and_moment_of_inertia() #global values
+    actual_mass, actual_com, actual_cof, actual_I = p_utils.get_actual_mass_com_cof_and_moment_of_inertia(objectID, num_links, object_scale) #global values
     print("actual_mass, actual_com, actual_I:",actual_mass, actual_com, actual_I)
     print("actual cof:", actual_cof)
 
@@ -401,12 +333,12 @@ def run_full_test(object_name):
     push_count = 0
 
     #set up the camera and start logging the video
-    set_up_camera(p.getBasePositionAndOrientation(objectID)[0])
+    p_utils.set_up_camera(p.getBasePositionAndOrientation(objectID)[0], 0.75)
     loggerID = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, os.path.join(test_dir, "video.mp4"))
 
     while len(candidate_region_link_indices) > 1:
         # reset the camera
-        set_up_camera(p.getBasePositionAndOrientation(objectID)[0])
+        p_utils.set_up_camera(p.getBasePositionAndOrientation(objectID)[0], 0.75)
 
         push_count += 1
 

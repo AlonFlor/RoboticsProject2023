@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import numpy as np
+import os
 
 def plot_data(x_axis_data, y_axis_data):
     plt.plot(x_axis_data, y_axis_data, 'b')
@@ -29,13 +31,14 @@ def plot_3D_loss_func(X_axis_data, y_axis_data, z_1):
 
 
 
-def plot_variable_vs_time(variable, variable_name, out_dir, show=False):
+def plot_variable_vs_time(variable, variable_name, dt, out_dir=None, show=False):
     title = "time vs "+ variable_name
     plt.title(title)
     plt.xlabel("time")
     plt.ylabel(variable_name)
     plt.plot([i*dt for i in range(len(variable))], variable, 'ob')
-    plt.savefig(os.path.join(out_dir, title))
+    if out_dir is not None:
+        plt.savefig(os.path.join(out_dir, title))
     if show:
         plt.show()
     plt.close("all")
@@ -43,7 +46,7 @@ def plot_variable_vs_time(variable, variable_name, out_dir, show=False):
 
 
 
-def plot_variables(var1, var1_name, var2, var2_name, out_dir, title_preamble, line_data=None, show=False):
+def plot_variables(var1, var1_name, var2, var2_name, title_preamble="", line_data=None, out_dir=None, show=False):
     title = title_preamble + var1_name + " vs "+ var2_name
     plt.title(title)
     plt.xlabel(var1_name)
@@ -52,7 +55,8 @@ def plot_variables(var1, var1_name, var2, var2_name, out_dir, title_preamble, li
         plt.plot(var1[i], var2[i], marker='o', color=(1.-(i/len(var1)),0.,i/len(var1),1.))
     if line_data is not None:
         plt.plot(var1,line_data, 'r-')
-    plt.savefig(os.path.join(out_dir, title))
+    if out_dir is not None:
+        plt.savefig(os.path.join(out_dir, title))
     if show:
         plt.show()
     plt.close("all")

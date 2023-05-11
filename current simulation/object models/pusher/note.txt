@@ -1,0 +1,3 @@
+Used by Blender to animate motion scripts.
+
+Pybullet creates its own pusher object for simulations.
