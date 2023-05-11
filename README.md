@@ -1,5 +1,21 @@
 # RoboticsProject2023
 
+## Current simulations folder
+
+The programs in the current simulation folder are
+
+- process_robot_lab_data.py
+- YCB_push_several_COMs.py
+- YCB_push_several_masses.py
+- YCB_several_pushes.py
+
+All of them involve a cylindrical pusher that executes quasi-static pushes on various rigid body objects.
+
+process_robot_lab_data.py takes data from the real life robot, which consists of end effector coordinates, forces (so far unused), and two poses of an object. The poses are before and after a push, while the end effector coordinates were recorded before, during, and after the same push. The frame-by-frame object poses are interpolated and displayed, while the robot end effector is simulated by the cylindrical pusher. This work is incomplete, since the start time of the object pose is calculated by taking the minimum pusher z-coordinate (height), and the end effector coordinates are of the robot arm's hand rather than its finger.
+
+YCB_push_several_COMs.py and YCB_push_several_masses.py both deal with the effects of a YCB object's inertial properties on its motion. Both take several copies of a YCB object, remove collision detection between those copies, and set them to be superimposed on each other. Each copy has a varying value of an inertial property: center of mass for the former simulation and total mass for the latter simulation. The pusher pushes all copies simulataneously, allowing the user to see how variation in a property affects the motion. So far, results indicate that the center of mass affects the motion of an object undergoing quasi-static pushing, but total mass has no effect. 
+
+YCB_several_pushes.py pushes a single YCB object in a different location in each push for several pushes, to see how the object reacts and to allow the user to see the center of mass. The simulation is reset between pushes.
 
 ## Old simulations folder
 
@@ -21,4 +37,4 @@ Even though quasistatic_rigid_body_pybullet_sim_2.py was somewhat successful, I 
 
 ## Running the files
 
-The models should be able to run by calling them from any software that runs Python 3 (Python 3.9 is the version used to program the simulations in PyCharm). The requisite libraries are numpy, sk_learn, os, time, PyBullet, and matplotlib.
+The models should be able to run by calling them from any software that runs Python 3 (Python 3.9 is the version used to program the simulations in PyCharm). The requisite libraries are numpy, os, PyBullet, and PIL. The simulations in the old simulations folder do not require PIL, but do require time, sk_learn, and matplotlib.
