@@ -4,7 +4,7 @@ import numpy as np
 
 #file handling
 
-def read_file(file):
+def read_numerical_csv_file(file):
     data_raw = []
     for line in file:
         data_raw.append(line.strip().split(","))
@@ -16,15 +16,38 @@ def read_file(file):
         data.append(line_data)
     return np.array(data)
 
+def read_csv_file(file_path, data_types):
+    file = open(file_path, "r", encoding="utf-8")
+    data_raw = []
+    for line in file:
+        data_raw.append(line.strip().split(","))
+    data = []
+    for line in data_raw[1:]:
+        line_data = []
+        for i,item in enumerate(line):
+            line_data.append(data_types[i](item))
+        data.append(line_data)
+    file.close()
+    return data
+
+def write_csv_file(file_path, header, data):
+    file = open(file_path, "w", encoding="utf-8")
+    file.write(header+"\n")
+    for line in data:
+        last_item_index =  len(line)-1
+        for i,item in enumerate(line):
+            file.write(str(item)+ ("\n" if i==last_item_index else ","))
+    file.close()
+
 
 def read_robot_lab_data(robot_lab_data_folder):
     pose_data_file = open(os.path.join(robot_lab_data_folder, "outobjectposes.csv"))
     forces_data_file = open(os.path.join(robot_lab_data_folder, "outforce.csv"))
     end_effector_data_file = open(os.path.join(robot_lab_data_folder, "outendeff.csv"))
 
-    pose_data = read_file(pose_data_file)[0]
-    forces_data = read_file(forces_data_file)
-    end_effector_data = read_file(end_effector_data_file)
+    pose_data = read_numerical_csv_file(pose_data_file)[0]
+    forces_data = read_numerical_csv_file(forces_data_file)
+    end_effector_data = read_numerical_csv_file(end_effector_data_file)
 
     pose_data_file.close()
     forces_data_file.close()

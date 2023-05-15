@@ -23,7 +23,7 @@ dt = 1./240.
 shapes_list = []
 motion_script = []
 
-object_IDs = []
+mobile_object_IDs = []
 
 
 
@@ -52,25 +52,25 @@ shapes_list.append(["bin",[0.0,0.0,0.0]])
 objectID, object_shapes_entry = p_utils.load_object("cracker_box", test_dir, (-0.01,-0.01,0.08))
 shapes_list.append(object_shapes_entry)
 motion_script.append([])
-object_IDs.append(objectID)
+mobile_object_IDs.append(objectID)
 p.resetBasePositionAndOrientation(objectID, (0.15,0.05,0.05), turned_orientation)
 
 objectID, object_shapes_entry = p_utils.load_object("hammer", test_dir, (-0.06,0.06,0.015))
 shapes_list.append(object_shapes_entry)
 motion_script.append([])
-object_IDs.append(objectID)
+mobile_object_IDs.append(objectID)
 p.resetBasePositionAndOrientation(objectID, (-0.05,0.05,0.05), (0.,0.,0.,1.))
 
 objectID, object_shapes_entry = p_utils.load_object("master_chef_can", test_dir, (-0.015,-0.01,0.06))
 shapes_list.append(object_shapes_entry)
 motion_script.append([])
-object_IDs.append(objectID)
+mobile_object_IDs.append(objectID)
 p.resetBasePositionAndOrientation(objectID, (0.15,-0.1,0.05), (0.,0.,0.,1.))
 
 objectID, object_shapes_entry = p_utils.load_object("pudding_box", test_dir, (0.,0.,0.015))
 shapes_list.append(object_shapes_entry)
 motion_script.append([])
-object_IDs.append(objectID)
+mobile_object_IDs.append(objectID)
 p.resetBasePositionAndOrientation(objectID, (-0.15,-0.05,0.05), (0.,0.,0.,1.))
 
 
@@ -83,7 +83,7 @@ pusher_visual_shapeID = p.createVisualShape(p.GEOM_CYLINDER, radius=pusher_radiu
 pusherID = p.createMultiBody(1., pusher_shapeID, pusher_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
 motion_script.append([])
 shapes_list.append(["pusher",[0.0,0.0,0.0]])
-object_IDs.append(pusherID)
+mobile_object_IDs.append(pusherID)
 
 
 
@@ -100,7 +100,7 @@ image_num = 0
 p.resetBasePositionAndOrientation(pusherID, pusher_start_pos, (0., 0., 0., 1.))
 #pusher_end = np.array([pusher_start_pos[0], pusher_start_pos[1]+0.4, pusher_start_pos[2]])
 pusher_end = np.array([pusher_start_pos[0]-0.35, pusher_start_pos[1], pusher_start_pos[2]])
-image_num = p_utils.push(pusher_end, pusherID, object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
+image_num = p_utils.push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
 
 
 

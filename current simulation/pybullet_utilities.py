@@ -1,6 +1,8 @@
 import pybullet as p
 import numpy as np
 import os
+
+import file_handling
 import make_URDF
 from PIL import Image
 
@@ -102,7 +104,7 @@ def get_actual_mass_com_cof_and_moment_of_inertia(objectID, num_links, object_sc
 
 
 
-def push(pusher_end, pusherID, object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script):
+def push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script):
     count = 0
     image_num = available_image_num + 0
 
@@ -110,7 +112,7 @@ def push(pusher_end, pusherID, object_IDs, dt, fps, view_matrix, proj_matrix, im
     while np.linalg.norm(np.array(pusher_position) - pusher_end) > 0.01:
         time_val = count * dt
         if (time_val * fps - int(time_val * fps) < 0.0001):
-            for ID in object_IDs:
+            for ID in mobile_object_IDs:
                 add_to_motion_script(ID, time_val, motion_script)
 
             print_image(view_matrix, proj_matrix, imgs_dir, image_num)
@@ -135,6 +137,31 @@ def push(pusher_end, pusherID, object_IDs, dt, fps, view_matrix, proj_matrix, im
 
 
 
+def let_time_pass(time_amount, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script):
+    count=0
+    image_num = available_image_num + 0
+
+    while time_amount>0:
+        time_val = count * dt
+        if (time_val * fps - int(time_val * fps) < 0.0001):
+            for ID in mobile_object_IDs:
+                add_to_motion_script(ID, time_val, motion_script)
+
+            print_image(view_matrix, proj_matrix, imgs_dir, image_num)
+            image_num += 1
+        count += 1
+
+        p.stepSimulation()
+
+        p.resetBaseVelocity(pusherID, (0., 0., 0.), (0., 0., 0.))
+        p.applyExternalForce(pusherID, -1, (0., 0., 9.8), (0., 0., 0.), p.LINK_FRAME)  # antigravity
+
+        time_amount -= dt
+
+    return image_num
+
+
+
 
 def quaternion_multiplication(q1, q2):
     r1 = q1[3]
@@ -145,6 +172,52 @@ def quaternion_multiplication(q1, q2):
     return (v_ans[0], v_ans[1], v_ans[2], r1*r2 - np.dot(v1,v2))
 
 
+
+
+
+def open_saved_scene(scene_file, test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list):
+    scene_data = file_handling.read_csv_file(scene_file, [str, float, float, float, float, float, float, float, float, float, float, int])
+
+    # load plane
+    planeID, plane_shapes_entry = load_object("plane", test_dir, useFixedBase=True)
+    shapes_list.append(plane_shapes_entry)
+    motion_script.append([])
+    add_to_motion_script(planeID, 0., motion_script)
+
+    for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
+        if object_type=="bin":
+            motion_script.append([])
+            bin_scale = (0.75, 0.75, 0.75)
+            bin_collision_ID = p.createCollisionShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
+            bin_visual_shapeID = p.createVisualShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
+            print(type(object_type),type(com_x),type(com_y),type(com_z),type(x),type(y),type(z),type(orient_x),type(orient_y),type(orient_z),type(orient_w),type(held_fixed))
+            bin_mass = 1.-held_fixed
+            binID = p.createMultiBody(bin_mass, bin_collision_ID, bin_visual_shapeID, (x, y, z * bin_scale[2]), (orient_x,orient_y,orient_z,orient_w))
+            add_to_motion_script(binID, 0., motion_script)
+            shapes_list.append(["bin", [0.0, 0.0, 0.0]])
+        else:
+            held_fixed_bool = bool(held_fixed)
+            objectID, object_shapes_entry = load_object(object_type, test_dir, (com_x, com_y, com_z), useFixedBase=held_fixed_bool)
+            shapes_list.append(object_shapes_entry)
+            motion_script.append([])
+            mobile_object_IDs.append(objectID)
+            mobile_object_types.append(object_type)
+            held_fixed_list.append(held_fixed_bool)
+            p.resetBasePositionAndOrientation(objectID, (x, y, z), (orient_x,orient_y,orient_z,orient_w))
+
+
+def save_scene(scene_file, binID, mobile_object_IDs, mobile_object_types, held_fixed_list):
+    bin_pose, bin_orientation = p.getBasePositionAndOrientation(binID)
+    bin_mass = p.getDynamicsInfo(binID,-1)[0]
+    data = [["bin", 0., 0., 0., bin_pose[0], bin_pose[1], bin_pose[2]/0.75, bin_orientation[0], bin_orientation[1], bin_orientation[2], bin_orientation[3], int(1.-bin_mass)]]
+    for i in np.arange(len(mobile_object_IDs)):
+        ID = mobile_object_IDs[i]
+        object_type = mobile_object_types[i]
+        held_fixed = held_fixed_list[i]
+        pose,orientation = p.getBasePositionAndOrientation(ID)
+        COM = p.getDynamicsInfo(ID,-1)[3]
+        data.append([object_type, COM[0], COM[1], COM[2], pose[0], pose[1], pose[2], orientation[0], orientation[1], orientation[2], orientation[3], int(held_fixed)])
+    file_handling.write_csv_file(scene_file, "object_type,COM_x,COM_y,COM_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", data)
 
 
 
