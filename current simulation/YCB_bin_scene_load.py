@@ -28,7 +28,7 @@ mobile_object_types = []
 held_fixed_list = []
 
 
-p_utils.open_saved_scene(os.path.join("scenes","scene_4.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
+p_utils.open_saved_scene(os.path.join("scenes","scene_7.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
 #create pusher
 pusher_radius = 0.01
@@ -45,13 +45,13 @@ fps = 24.
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 45, -75)
 
 #pusher_start_pos = (0.,-0.25,0.02)
-pusher_start_pos = (0.2,0.,0.02)
+pusher_start_pos = (0.25,0.,0.02)
 
 image_num = 0
 
 p.resetBasePositionAndOrientation(pusherID, pusher_start_pos, (0., 0., 0., 1.))
 #pusher_end = np.array([pusher_start_pos[0], pusher_start_pos[1]+0.4, pusher_start_pos[2]])
-pusher_end = np.array([pusher_start_pos[0]-0.2, pusher_start_pos[1], pusher_start_pos[2]])
+pusher_end = np.array([pusher_start_pos[0]-0.15, pusher_start_pos[1], pusher_start_pos[2]])
 image_num = p_utils.push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
 
 
