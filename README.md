@@ -2,13 +2,18 @@
 
 ## Current simulations folder
 
-The programs in the current simulation folder are
+Some files are utilities folder that do not run simulations on their own. Other files are the main programs.
+
+The main programs in the current simulation folder are
 
 - quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py
 - process_robot_lab_data.py
 - YCB_push_several_COMs.py
 - YCB_push_several_masses.py
 - YCB_several_pushes.py
+- YCB_bin1.py
+- YCB_bin_scene_generate.py
+- YCB_bin_scene_load.py
 
 All of them involve a cylindrical pusher that executes quasi-static pushes on various rigid body objects.
 
@@ -19,6 +24,14 @@ process_robot_lab_data.py takes data from the real life robot, which consists of
 YCB_push_several_COMs.py and YCB_push_several_masses.py both deal with the effects of a YCB object's inertial properties on its motion. Both take several copies of a YCB object, remove collision detection between those copies, and set them to be superimposed on each other. Each copy has a varying value of an inertial property: center of mass for the former simulation and total mass for the latter simulation. The pusher pushes all copies simulataneously, allowing the user to see how variation in a property affects the motion. So far, results indicate that the center of mass affects the motion of an object undergoing quasi-static pushing, but total mass has no effect. 
 
 YCB_several_pushes.py pushes a single YCB object in a different location in each push for several pushes, to see how the object reacts and to allow the user to see the center of mass. The simulation is reset between pushes.
+
+YCB_bin1.py is a test simulation with several YCB objects.
+
+YCB_bin_scene_generate.py generates a scene csv file, listing the starting objects, their centers of mass, their poses (position and orientation), and whether or not they are held fixed.
+
+YCB_bin_scene_load.py opens up a saved scene via its csv file. This will be the basis of the MCTS state transition simulator, which needs to load up saved states.
+
+
 
 ## Old simulations folder
 
