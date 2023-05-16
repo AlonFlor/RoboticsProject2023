@@ -48,7 +48,14 @@ binID = p.createMultiBody(0., bin_collision_ID, bin_visual_shapeID, (0., 0., 0.4
 p_utils.add_to_motion_script(binID, 0., motion_script)
 shapes_list.append(["bin",[0.0,0.0,0.0]])
 
-
+'''for scene_num in range(1,8):
+    scene_data = file_handling.read_csv_file(os.path.join("scenes",f"scene_{scene_num}.csv"), [str, float, float, float, float, float, float, float, float, float, float, int])
+    COM_list_per_object = {"bin":(0.,0.,0.), "cracker_box":(-0.02,-0.04,0.16), "pudding_box":(0.03,0.02,0.015), "master_chef_can":(0.02,-0.02,0.06)}
+    new_COM_list = []
+    for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
+        new_COM_list.append(COM_list_per_object[object_type])
+    p_utils.save_scene_with_shifted_COMs(os.path.join("scenes",f"scene_{scene_num}.csv"), os.path.join("scenes",f"scene_{scene_num}_shifted_COM.csv"), new_COM_list)
+exit(0)'''
 
 #load objects
 

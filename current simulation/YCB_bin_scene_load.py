@@ -28,7 +28,7 @@ mobile_object_types = []
 held_fixed_list = []
 
 
-p_utils.open_saved_scene(os.path.join("scenes","scene_7.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
+p_utils.open_saved_scene(os.path.join("scenes",f"scene_{7}_shifted_COM.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
 #create pusher
 pusher_radius = 0.01

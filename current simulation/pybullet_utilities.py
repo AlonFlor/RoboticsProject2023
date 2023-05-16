@@ -171,6 +171,12 @@ def quaternion_multiplication(q1, q2):
     v_ans = r1*v2 + r2*v1 + np.cross(v1,v2)
     return (v_ans[0], v_ans[1], v_ans[2], r1*r2 - np.dot(v1,v2))
 
+def rotate_vector(vec, quat):
+    quat_inv = (-quat[0],-quat[1],-quat[2],quat[3])
+    vec_as_quat = (vec[0], vec[1], vec[2], 0.)
+    qP = quaternion_multiplication(quat, vec_as_quat)
+    result = quaternion_multiplication(qP, quat_inv)
+    return result[:3]
 
 
 
@@ -218,6 +224,24 @@ def save_scene(scene_file, binID, mobile_object_IDs, mobile_object_types, held_f
         COM = p.getDynamicsInfo(ID,-1)[3]
         data.append([object_type, COM[0], COM[1], COM[2], pose[0], pose[1], pose[2], orientation[0], orientation[1], orientation[2], orientation[3], int(held_fixed)])
     file_handling.write_csv_file(scene_file, "object_type,COM_x,COM_y,COM_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", data)
+
+
+def save_scene_with_shifted_COMs(original_scene_file, new_scene_file, new_COM_list):
+    original_scene_data = file_handling.read_csv_file(original_scene_file, [str, float, float, float, float, float, float, float, float, float, float, int])
+    new_scene_data = []
+
+    object_count=0
+    for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in original_scene_data:
+        new_COM = new_COM_list[object_count]
+        unrotated = [-com_x+new_COM[0], -com_y+new_COM[1], -com_z+new_COM[2]]
+        orientation = (orient_x,orient_y,orient_z,orient_w)
+        if object_type != "bin":
+            rotated = rotate_vector(unrotated, orientation)
+        else:
+            rotated = unrotated
+        new_scene_data.append([object_type,new_COM[0],new_COM[1],new_COM[2],x+rotated[0],y+rotated[1],z+rotated[2],orient_x,orient_y,orient_z,orient_w,held_fixed])
+        object_count+=1
+    file_handling.write_csv_file(new_scene_file, "object_type,COM_x,COM_y,COM_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", new_scene_data)
 
 
 
