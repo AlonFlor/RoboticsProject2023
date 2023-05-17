@@ -31,7 +31,7 @@ held_fixed_list = []
 #p_utils.open_saved_scene(os.path.join("scenes",f"scene_{4} - no constraint.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
 #p_utils.open_saved_scene(os.path.join("scenes",f"scene_{4}_shifted_COM - no constraint.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
-p_utils.open_saved_scene(os.path.join("scenes",f"scene_{9}_shifted_COM.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
+binID = p_utils.open_saved_scene(os.path.join("scenes",f"scene_{9}_shifted_COM.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
 
 #create pusher
@@ -53,11 +53,19 @@ pusher_start_pos = (0.25,0.,0.02)
 
 image_num = 0
 
+
 p.resetBasePositionAndOrientation(pusherID, pusher_start_pos, (0., 0., 0., 1.))
-#pusher_end = np.array([pusher_start_pos[0], pusher_start_pos[1]+0.4, pusher_start_pos[2]])
+
+#save scene before
+p_utils.save_scene(os.path.join(test_dir,"scene_before.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
+
 pusher_end = np.array([pusher_start_pos[0]-0.25, pusher_start_pos[1], pusher_start_pos[2]])
 image_num = p_utils.push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
 
+
+#save scene after
+p_utils.save_scene(os.path.join(test_dir,"scene_after.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
+p_utils.write_PLY_file(os.path.join(test_dir,"scene_after.ply"), view_matrix, proj_matrix)
 
 
 p.disconnect()

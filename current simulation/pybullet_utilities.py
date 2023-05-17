@@ -190,13 +190,14 @@ def open_saved_scene(scene_file, test_dir, shapes_list, motion_script, mobile_ob
     motion_script.append([])
     add_to_motion_script(planeID, 0., motion_script)
 
+    binID = None
+
     for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
         if object_type=="bin":
             motion_script.append([])
             bin_scale = (0.75, 0.75, 0.75)
             bin_collision_ID = p.createCollisionShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
             bin_visual_shapeID = p.createVisualShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
-            print(type(object_type),type(com_x),type(com_y),type(com_z),type(x),type(y),type(z),type(orient_x),type(orient_y),type(orient_z),type(orient_w),type(held_fixed))
             bin_mass = 1.-held_fixed
             binID = p.createMultiBody(bin_mass, bin_collision_ID, bin_visual_shapeID, (x, y, z * bin_scale[2]), (orient_x,orient_y,orient_z,orient_w))
             add_to_motion_script(binID, 0., motion_script)
@@ -210,6 +211,8 @@ def open_saved_scene(scene_file, test_dir, shapes_list, motion_script, mobile_ob
             mobile_object_types.append(object_type)
             held_fixed_list.append(held_fixed_bool)
             p.resetBasePositionAndOrientation(objectID, (x, y, z), (orient_x,orient_y,orient_z,orient_w))
+
+    return binID
 
 
 def save_scene(scene_file, binID, mobile_object_IDs, mobile_object_types, held_fixed_list):
@@ -249,3 +252,67 @@ def save_scene_with_shifted_COMs(original_scene_file, new_scene_file, new_COM_li
 def add_to_motion_script(id, time_val, motion_script):
     position, orientation = p.getBasePositionAndOrientation(id)
     motion_script[id].append([time_val,position[0],position[1],position[2],orientation[0],orientation[1],orientation[2],orientation[3]])
+
+
+def write_PLY_file(ply_file_path, view_matrix, proj_matrix):
+    w, h, RGBA, depth, _ = p.getCameraImage(640, 480, view_matrix, proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
+    RGBA_numpy = np.array(RGBA).reshape((h, w, 4))
+    depth_numpy = np.array(depth).reshape((h,w))
+
+    #using same hard-coded values as those in set_up_camera to create proj matrix
+    near = 0.001
+    far = 100.0
+
+    #get inverse of projection matrix times view matrix
+    #based on https://stackoverflow.com/questions/69803623/how-to-project-pybullet-simulation-coordinates-to-rendered-frame-pixel-coordinat
+    pm = np.array(proj_matrix).reshape((4,4))
+    vm = np.array(view_matrix).reshape((4,4))
+    fm = pm.T @ vm.T
+    fm_inv = np.linalg.inv(fm)
+
+    # based on https://gist.github.com/Shreeyak/9a4948891541cb32b501d058db227fff
+    pixel_x, pixel_y = np.meshgrid(np.linspace(0, w - 1, w), np.linspace(0, h - 1, h))
+    points = np.array([pixel_x, pixel_y]).transpose(1,2,0)#.reshape(-1,2)
+    points = np.append(points, np.zeros((h,w,1)), 2)
+    points = np.append(points, np.ones((h,w,1)), 2)
+    color_points = RGBA_numpy.reshape(-1, 4)
+
+    #get the depth information
+    #based on https://pybullet.org/Bullet/phpBB3/viewtopic.php?t=13370
+    depth_numpy_corrected = far * near / (far - (far - near) * depth_numpy)
+
+    corrected_points = np.zeros((h*w,3))
+    point_index=0
+    for i in np.arange(h):
+        for j in np.arange(w):
+            result = np.matmul(fm_inv, points[i][j])
+            result = (result/result[3])[:3]
+            result[2] = depth_numpy_corrected[i][j]
+            corrected_points[point_index] = result
+            point_index+=1
+            #print(result)
+
+    #write ply file contents
+    ply_header_str = "ply\n"\
+              + "format ascii 1.0\n"\
+              + "comment point cloud generated from RGBD image taken in PyBullet simulation\n"\
+              + "element vertex " + str(len(corrected_points))+"\n"\
+              + "property float x\n"\
+              + "property float y\n"\
+              + "property float z\n"\
+              + "end_header"
+              #+ "property uchar red\n"\
+              #+ "property uchar green\n"\
+              #+ "property uchar blue\n"\
+    #for i in np.arange(len(corrected_points)):
+    #    ply_str += " ".join(map(str,corrected_points[i])) + " ".join(map(str,color_points[i])) + "\n"
+
+    #combined_xyz_rgb = np.concatenate((corrected_points,color_points), axis=1)
+
+    # output to ply file
+    np.savetxt(ply_file_path, corrected_points, fmt='%f', header=ply_header_str, comments='', encoding='utf-8')
+
+    '''#output to ply file
+    ply_file = open(ply_file_path,"w",encoding="utf-8")
+    ply_file.write(ply_str)
+    ply_file.close()'''
