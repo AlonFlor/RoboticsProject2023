@@ -65,7 +65,7 @@ image_num = p_utils.push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_
 
 #save scene after
 p_utils.save_scene(os.path.join(test_dir,"scene_after.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
-p_utils.write_PLY_file(os.path.join(test_dir,"scene_after.ply"), view_matrix, proj_matrix)
+p_utils.write_PLY_files(os.path.join(test_dir,"scene_after"), view_matrix, proj_matrix, mobile_object_IDs)
 
 
 p.disconnect()

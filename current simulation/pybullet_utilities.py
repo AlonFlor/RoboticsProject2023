@@ -254,9 +254,21 @@ def add_to_motion_script(id, time_val, motion_script):
     motion_script[id].append([time_val,position[0],position[1],position[2],orientation[0],orientation[1],orientation[2],orientation[3]])
 
 
-def write_PLY_file(ply_file_path, view_matrix, proj_matrix):
-    w, h, RGBA, depth, _ = p.getCameraImage(640, 480, view_matrix, proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
-    RGBA_numpy = np.array(RGBA).reshape((h, w, 4))
+def PLY_header_str(num_points):
+    return "ply\n"\
+              + "format ascii 1.0\n"\
+              + "comment point cloud generated from RGBD image taken in PyBullet simulation\n"\
+              + "element vertex " + str(num_points)+"\n"\
+              + "property float x\n"\
+              + "property float y\n"\
+              + "property float z\n"\
+              + "end_header"
+
+
+def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile_object_IDs):
+    w, h, RGBA, depth, segmentation_mask = p.getCameraImage(640, 480, view_matrix, proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
+    segmentation_numpy = np.array(segmentation_mask).reshape((h*w))
+    #RGBA_numpy = np.array(RGBA).reshape((h, w, 4))
     depth_numpy = np.array(depth).reshape((h,w))
 
     #using same hard-coded values as those in set_up_camera to create proj matrix
@@ -267,7 +279,7 @@ def write_PLY_file(ply_file_path, view_matrix, proj_matrix):
     #based on https://stackoverflow.com/questions/69803623/how-to-project-pybullet-simulation-coordinates-to-rendered-frame-pixel-coordinat
     pm = np.array(proj_matrix).reshape((4,4))
     vm = np.array(view_matrix).reshape((4,4))
-    fm = pm.T @ vm.T
+    fm = np.matmul(pm.T, vm.T)
     fm_inv = np.linalg.inv(fm)
 
     # based on https://gist.github.com/Shreeyak/9a4948891541cb32b501d058db227fff
@@ -275,7 +287,6 @@ def write_PLY_file(ply_file_path, view_matrix, proj_matrix):
     points = np.array([pixel_x, pixel_y]).transpose(1,2,0)#.reshape(-1,2)
     points = np.append(points, np.zeros((h,w,1)), 2)
     points = np.append(points, np.ones((h,w,1)), 2)
-    color_points = RGBA_numpy.reshape(-1, 4)
 
     #get the depth information
     #based on https://pybullet.org/Bullet/phpBB3/viewtopic.php?t=13370
@@ -292,27 +303,17 @@ def write_PLY_file(ply_file_path, view_matrix, proj_matrix):
             point_index+=1
             #print(result)
 
-    #write ply file contents
-    ply_header_str = "ply\n"\
-              + "format ascii 1.0\n"\
-              + "comment point cloud generated from RGBD image taken in PyBullet simulation\n"\
-              + "element vertex " + str(len(corrected_points))+"\n"\
-              + "property float x\n"\
-              + "property float y\n"\
-              + "property float z\n"\
-              + "end_header"
-              #+ "property uchar red\n"\
-              #+ "property uchar green\n"\
-              #+ "property uchar blue\n"\
-    #for i in np.arange(len(corrected_points)):
-    #    ply_str += " ".join(map(str,corrected_points[i])) + " ".join(map(str,color_points[i])) + "\n"
+    for id in mobile_object_IDs:
+        #based on https://gist.github.com/Shreeyak/9a4948891541cb32b501d058db227fff
+        indicies_to_use = np.where(segmentation_numpy == id)
+        corrected_points_to_use = corrected_points[indicies_to_use]
+        print(segmentation_numpy.shape)
+        print(indicies_to_use)
+        print(corrected_points.shape)
+        print(corrected_points_to_use.shape)
 
-    #combined_xyz_rgb = np.concatenate((corrected_points,color_points), axis=1)
+        np.savetxt(ply_file_path_no_extension + "_objID_"+str(id)+".ply", corrected_points_to_use, fmt='%f',
+                   header=PLY_header_str(len(corrected_points_to_use)), comments='', encoding='utf-8')
 
     # output to ply file
-    np.savetxt(ply_file_path, corrected_points, fmt='%f', header=ply_header_str, comments='', encoding='utf-8')
-
-    '''#output to ply file
-    ply_file = open(ply_file_path,"w",encoding="utf-8")
-    ply_file.write(ply_str)
-    ply_file.close()'''
+    np.savetxt(ply_file_path_no_extension+"_all_points.ply", corrected_points, fmt='%f', header=PLY_header_str(len(corrected_points)), comments='', encoding='utf-8')
