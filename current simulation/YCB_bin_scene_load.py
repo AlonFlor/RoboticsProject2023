@@ -46,7 +46,7 @@ shapes_list.append(["pusher",[0.0,0.0,0.0]])
 
 
 fps = 24.
-view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 45, -75)
+view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 0, -75)
 
 #pusher_start_pos = (0.,-0.25,0.02)
 pusher_start_pos = (0.25,0.,0.02)
@@ -60,7 +60,7 @@ p.resetBasePositionAndOrientation(pusherID, pusher_start_pos, (0., 0., 0., 1.))
 p_utils.save_scene(os.path.join(test_dir,"scene_before.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
 pusher_end = np.array([pusher_start_pos[0]-0.25, pusher_start_pos[1], pusher_start_pos[2]])
-image_num = p_utils.push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
+#image_num = p_utils.push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
 
 
 #save scene after
@@ -75,4 +75,4 @@ p.disconnect()
 file_handling.write_records_and_motion_script(shapes_list, test_dir, motion_script)
 
 #make a video from saved images
-p_utils.make_video(test_dir,imgs_dir)
+#p_utils.make_video(test_dir,imgs_dir)

@@ -275,15 +275,22 @@ def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile
     near = 0.001
     far = 100.0
 
-    #get inverse of projection matrix times view matrix
+    #get matrices to transform pixels to 3D coordinates
     #based on https://stackoverflow.com/questions/69803623/how-to-project-pybullet-simulation-coordinates-to-rendered-frame-pixel-coordinat
     pm = np.array(proj_matrix).reshape((4,4))
     vm = np.array(view_matrix).reshape((4,4))
-    fm = np.matmul(pm.T, vm.T)
+    tr = -vm.T[:3,3]
+    R = vm.T[:3,:3]
+    R
+    print(tr)
+    print(R)
+    fm = pm.T#np.matmul(pm, vm.T)
     fm_inv = np.linalg.inv(fm)
+    print(pm,"\n","\n",vm,"\n",fm)
+    print(fm_inv)
 
     # based on https://gist.github.com/Shreeyak/9a4948891541cb32b501d058db227fff
-    pixel_x, pixel_y = np.meshgrid(np.linspace(0, w - 1, w), np.linspace(0, h - 1, h))
+    pixel_x, pixel_y = np.meshgrid(np.linspace(-w/2, w/2 - 1, w), np.linspace(-h/2, h/2 - 1, h))
     points = np.array([pixel_x, pixel_y]).transpose(1,2,0)#.reshape(-1,2)
     points = np.append(points, np.zeros((h,w,1)), 2)
     points = np.append(points, np.ones((h,w,1)), 2)
@@ -291,14 +298,22 @@ def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile
     #get the depth information
     #based on https://pybullet.org/Bullet/phpBB3/viewtopic.php?t=13370
     depth_numpy_corrected = far * near / (far - (far - near) * depth_numpy)
+    depth_plane_multiplier = np.array([pm[0][0],pm[1][1],1.])
 
     corrected_points = np.zeros((h*w,3))
     point_index=0
+    #this works for a camera with roll=0 and with either nonzero pitch or nonzero yaw, but not both. It should be good enough for experiments.
+    #make it go faster. Current mission is to get a scene generation to run in way less than a second.
     for i in np.arange(h):
         for j in np.arange(w):
+            #get points
             result = np.matmul(fm_inv, points[i][j])
             result = (result/result[3])[:3]
-            result[2] = depth_numpy_corrected[i][j]
+            result = np.multiply(result, depth_numpy_corrected[i][j]*depth_plane_multiplier)
+            result[2] = -depth_numpy_corrected[i][j]
+            #set points to world coordinates
+            result += tr
+            result = np.matmul(R, result)
             corrected_points[point_index] = result
             point_index+=1
             #print(result)
@@ -307,10 +322,6 @@ def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile
         #based on https://gist.github.com/Shreeyak/9a4948891541cb32b501d058db227fff
         indicies_to_use = np.where(segmentation_numpy == id)
         corrected_points_to_use = corrected_points[indicies_to_use]
-        print(segmentation_numpy.shape)
-        print(indicies_to_use)
-        print(corrected_points.shape)
-        print(corrected_points_to_use.shape)
 
         np.savetxt(ply_file_path_no_extension + "_objID_"+str(id)+".ply", corrected_points_to_use, fmt='%f',
                    header=PLY_header_str(len(corrected_points_to_use)), comments='', encoding='utf-8')
