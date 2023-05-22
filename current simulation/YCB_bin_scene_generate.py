@@ -118,7 +118,7 @@ pusher_start_pos = (0.25,0.,0.02)
 image_num = 0
 
 p.resetBasePositionAndOrientation(pusherID, pusher_start_pos, (0., 0., 0., 1.))
-image_num = p_utils.let_time_pass(.5, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
+image_num = p_utils.let_time_pass(.5, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
 
 
 held_fixed_list = [False for item in mobile_object_types]

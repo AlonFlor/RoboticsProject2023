@@ -86,7 +86,7 @@ view_matrix, proj_matrix = p_utils.set_up_camera(startPos, 0.5)
 image_num = 0
 p.resetBasePositionAndOrientation(pusherID, (startPos[0], startPos[1]-0.15, startPos[2]+0.05), (0., 0., 0., 1.))
 pusher_end = np.array([startPos[0], startPos[1]+0.1, startPos[2]+0.05])
-image_num = p_utils.push(pusher_end, pusherID, object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
+image_num = p_utils.push(pusher_end, pusherID, dt, object_IDs, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
 
 
 

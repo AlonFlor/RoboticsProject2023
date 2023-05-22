@@ -60,7 +60,7 @@ p.resetBasePositionAndOrientation(pusherID, pusher_start_pos, (0., 0., 0., 1.))
 p_utils.save_scene(os.path.join(test_dir,"scene_before.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
 pusher_end = np.array([pusher_start_pos[0]-0.25, pusher_start_pos[1], pusher_start_pos[2]])
-image_num = p_utils.push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
+image_num = p_utils.push(pusher_end, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
 
 
 #save scene after

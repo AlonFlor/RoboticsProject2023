@@ -19,6 +19,9 @@ def load_object(name, test_dir, model_COM=(0.,0.,0.), useFixedBase=False):
     return objectID, [name,model_COM]
 
 
+#def load_robot()
+
+
 
 def set_up_camera(pos, distance=0.75, yaw=45, pitch=-35):
     #from https://github.com/changkyu/iros2020_changkyu/blob/master/software/simulator/SimBullet.py
@@ -114,12 +117,12 @@ def save_data_one_frame(time_val, fps, mobile_object_IDs, motion_script, image_n
     return image_num
 
 
-def push(pusher_end, pusherID, mobile_object_IDs, dt, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
+def push(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
     count = 0
     image_num = None
     if available_image_num != None:
         image_num = available_image_num + 0
-    saving_data = not (view_matrix==None)
+    saving_data = not (mobile_object_IDs==None)
 
     pusher_position = p.getBasePositionAndOrientation(pusherID)[0]
     while np.linalg.norm(np.array(pusher_position) - pusher_end) > 0.01:
@@ -149,7 +152,7 @@ def push(pusher_end, pusherID, mobile_object_IDs, dt, fps=None, view_matrix=None
 
 
 
-def grasp_helper(grasper1_ID, grasper2_ID, grasper_initial_height, graspers_distance, grasper_speed, upward_motion_0_or_1):
+'''def grasp_helper(grasper1_ID, grasper2_ID, grasper_initial_height, graspers_distance, grasper_speed, upward_motion_0_or_1):
     # reset the grapsers
     grasper1_position = p.getBasePositionAndOrientation(grasper1_ID)[0]
     grasper2_position = p.getBasePositionAndOrientation(grasper2_ID)[0]
@@ -170,8 +173,8 @@ def grasp_helper(grasper1_ID, grasper2_ID, grasper_initial_height, graspers_dist
     #move the graspers
     new_grasper_velocity = grasper_speed * grasper2_to_grasper1 / graspers_distance
     upward_motion = grasper_speed * upward_motion_0_or_1
-    if upward_motion_0_or_1==1:
-        new_grasper_velocity*=0.1
+    #if upward_motion_0_or_1==1:
+    #    new_grasper_velocity*=0.
     p.resetBaseVelocity(grasper1_ID, (-new_grasper_velocity[0], -new_grasper_velocity[1], upward_motion-new_grasper_velocity[2]),(0., 0., 0.))
     p.resetBaseVelocity(grasper2_ID, (new_grasper_velocity[0], new_grasper_velocity[1], upward_motion+new_grasper_velocity[2]),(0., 0., 0.))
     p.applyExternalForce(grasper1_ID, -1, (0., 0., 9.8), (0., 0., 0.), p.LINK_FRAME)  # antigravity
@@ -182,12 +185,12 @@ def grasp_helper(grasper1_ID, grasper2_ID, grasper_initial_height, graspers_dist
 
 
 def grasp(grasper1_ID, grasper2_ID, grasper_initial_height,
-          mobile_object_IDs, dt, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
+          dt, mobile_object_IDs=None, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
     count = 0
     image_num = None
     if available_image_num != None:
         image_num = available_image_num + 0
-    saving_data = not (view_matrix==None)
+    saving_data = not (mobile_object_IDs==None)
 
     grasper1_position = p.getBasePositionAndOrientation(grasper1_ID)[0]
     grasper2_position = p.getBasePositionAndOrientation(grasper2_ID)[0]
@@ -222,15 +225,17 @@ def grasp(grasper1_ID, grasper2_ID, grasper_initial_height,
         grasp_helper(grasper1_ID, grasper2_ID, grasper_initial_height, graspers_distance, grasper_speed, 1)
         count += 1
 
-    return image_num
+    return image_num'''
 
 
 
-def let_time_pass(time_amount, pusherID, mobile_object_IDs, dt, fps, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None):
+def let_time_pass(time_amount, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None):
     #for pusher
     count=0
-    image_num = available_image_num + 0
-    saving_data = not (view_matrix==None)
+    image_num = None
+    if available_image_num != None:
+        image_num = available_image_num + 0
+    saving_data = not (mobile_object_IDs==None)
 
     while time_amount>0:
         time_val = count * dt
