@@ -104,19 +104,23 @@ def get_actual_mass_com_cof_and_moment_of_inertia(objectID, num_links, object_sc
 
 
 
-def push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script):
+def push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
     count = 0
     image_num = available_image_num + 0
+    saving_data = not (view_matrix==None)
 
     pusher_position = p.getBasePositionAndOrientation(pusherID)[0]
     while np.linalg.norm(np.array(pusher_position) - pusher_end) > 0.01:
         time_val = count * dt
-        if (time_val * fps - int(time_val * fps) < 0.0001):
+        if saving_data and (time_val * fps - int(time_val * fps) < 0.0001):
             for ID in mobile_object_IDs:
                 add_to_motion_script(ID, time_val, motion_script)
 
             print_image(view_matrix, proj_matrix, imgs_dir, image_num)
             image_num+=1
+
+        if time_val > time_out:
+            break #pusher timed out
 
         p.stepSimulation()
 
@@ -137,13 +141,14 @@ def push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_mat
 
 
 
-def let_time_pass(time_amount, pusherID, mobile_object_IDs, dt, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script):
+def let_time_pass(time_amount, pusherID, mobile_object_IDs, dt, fps, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None):
     count=0
     image_num = available_image_num + 0
+    saving_data = not (view_matrix==None)
 
     while time_amount>0:
         time_val = count * dt
-        if (time_val * fps - int(time_val * fps) < 0.0001):
+        if saving_data and (time_val * fps - int(time_val * fps) < 0.0001):
             for ID in mobile_object_IDs:
                 add_to_motion_script(ID, time_val, motion_script)
 
@@ -281,7 +286,6 @@ def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile
     vm = np.array(view_matrix).reshape((4,4))
     tr = -vm.T[:3,3]
     R = vm.T[:3,:3]
-    R
     print(tr)
     print(R)
     fm = pm.T#np.matmul(pm, vm.T)
@@ -326,5 +330,13 @@ def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile
         np.savetxt(ply_file_path_no_extension + "_objID_"+str(id)+".ply", corrected_points_to_use, fmt='%f',
                    header=PLY_header_str(len(corrected_points_to_use)), comments='', encoding='utf-8')
 
-    # output to ply file
-    np.savetxt(ply_file_path_no_extension+"_all_points.ply", corrected_points, fmt='%f', header=PLY_header_str(len(corrected_points)), comments='', encoding='utf-8')
+        indicies_obstacles = np.where(segmentation_numpy != id and segmentation_numpy != 0) #avoid the plane and the target object
+        corrected_points_obstacles = corrected_points[indicies_obstacles]
+
+        # output to ply file
+        np.savetxt(ply_file_path_no_extension+ "_objID_"+str(id)+"_obstacles.ply", corrected_points_obstacles, fmt='%f',
+                   header=PLY_header_str(len(corrected_points_obstacles)), comments='', encoding='utf-8')
+
+def get_points_from_ply_files(points_file_path):
+    points = np.loadtxt(points_file_path,delimiter=" ",skiprows=37,max_rows=1556-37)[:,:3]
+    points
