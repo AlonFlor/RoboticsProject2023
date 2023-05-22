@@ -104,20 +104,28 @@ def get_actual_mass_com_cof_and_moment_of_inertia(objectID, num_links, object_sc
 
 
 
-def push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
+def save_data_one_frame(time_val, fps, mobile_object_IDs, motion_script, image_num, view_matrix, proj_matrix, imgs_dir):
+    if (time_val * fps - int(time_val * fps) < 0.0001):
+        for ID in mobile_object_IDs:
+            add_to_motion_script(ID, time_val, motion_script)
+
+        print_image(view_matrix, proj_matrix, imgs_dir, image_num)
+        image_num += 1
+    return image_num
+
+
+def push(pusher_end, pusherID, mobile_object_IDs, dt, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
     count = 0
-    image_num = available_image_num + 0
+    image_num = None
+    if available_image_num != None:
+        image_num = available_image_num + 0
     saving_data = not (view_matrix==None)
 
     pusher_position = p.getBasePositionAndOrientation(pusherID)[0]
     while np.linalg.norm(np.array(pusher_position) - pusher_end) > 0.01:
         time_val = count * dt
-        if saving_data and (time_val * fps - int(time_val * fps) < 0.0001):
-            for ID in mobile_object_IDs:
-                add_to_motion_script(ID, time_val, motion_script)
-
-            print_image(view_matrix, proj_matrix, imgs_dir, image_num)
-            image_num+=1
+        if saving_data:
+            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, motion_script, image_num, view_matrix, proj_matrix, imgs_dir)
 
         if time_val > time_out:
             break #pusher timed out
@@ -141,19 +149,93 @@ def push(pusher_end, pusherID, mobile_object_IDs, dt, fps, view_matrix=None, pro
 
 
 
+def grasp_helper(grasper1_ID, grasper2_ID, grasper_initial_height, graspers_distance, grasper_speed, upward_motion_0_or_1):
+    # reset the grapsers
+    grasper1_position = p.getBasePositionAndOrientation(grasper1_ID)[0]
+    grasper2_position = p.getBasePositionAndOrientation(grasper2_ID)[0]
+    if upward_motion_0_or_1==0:
+        grasper1_position = (grasper1_position[0], grasper1_position[1], grasper_initial_height)  # keep the height constant
+        grasper2_position = (grasper2_position[0], grasper2_position[1], grasper_initial_height)  # keep the height constant
+    else:
+        grasper2_position = (grasper2_position[0], grasper2_position[1], grasper1_position[2])
+    p.resetBasePositionAndOrientation(grasper1_ID, grasper1_position, (0., 0., 0., 1.))
+    p.resetBasePositionAndOrientation(grasper2_ID, grasper2_position, (0., 0., 0., 1.))
+
+    #get the vector from grasper2 to grasper1 and get the distance between the graspers
+    grasper2_to_grasper1 = np.array(grasper1_position) - np.array(grasper2_position)
+    new_graspers_distance = np.linalg.norm(grasper2_to_grasper1)
+    graspers_distance_change = new_graspers_distance - graspers_distance
+    graspers_distance = new_graspers_distance
+
+    #move the graspers
+    new_grasper_velocity = grasper_speed * grasper2_to_grasper1 / graspers_distance
+    upward_motion = grasper_speed * upward_motion_0_or_1
+    if upward_motion_0_or_1==1:
+        new_grasper_velocity*=0.1
+    p.resetBaseVelocity(grasper1_ID, (-new_grasper_velocity[0], -new_grasper_velocity[1], upward_motion-new_grasper_velocity[2]),(0., 0., 0.))
+    p.resetBaseVelocity(grasper2_ID, (new_grasper_velocity[0], new_grasper_velocity[1], upward_motion+new_grasper_velocity[2]),(0., 0., 0.))
+    p.applyExternalForce(grasper1_ID, -1, (0., 0., 9.8), (0., 0., 0.), p.LINK_FRAME)  # antigravity
+    p.applyExternalForce(grasper2_ID, -1, (0., 0., 9.8), (0., 0., 0.), p.LINK_FRAME)  # antigravity
+
+    return graspers_distance, graspers_distance_change
+
+
+
+def grasp(grasper1_ID, grasper2_ID, grasper_initial_height,
+          mobile_object_IDs, dt, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
+    count = 0
+    image_num = None
+    if available_image_num != None:
+        image_num = available_image_num + 0
+    saving_data = not (view_matrix==None)
+
+    grasper1_position = p.getBasePositionAndOrientation(grasper1_ID)[0]
+    grasper2_position = p.getBasePositionAndOrientation(grasper2_ID)[0]
+    graspers_distance = np.linalg.norm(np.array(grasper1_position) - np.array(grasper2_position))
+    graspers_distance_change = -100.
+    time_val = 0.
+    grasper_speed = .1
+
+    #clamp the graspers to the object
+    grasp_helper(grasper1_ID, grasper2_ID, grasper_initial_height, graspers_distance, grasper_speed, 0)
+    while graspers_distance_change < 0.:
+        time_val = count * dt
+        if saving_data:
+            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, motion_script, image_num, view_matrix, proj_matrix, imgs_dir)
+
+        if time_val > time_out:
+            break #pusher timed out
+
+        p.stepSimulation()
+
+        graspers_distance, graspers_distance_change = grasp_helper(grasper1_ID, grasper2_ID, grasper_initial_height, graspers_distance, grasper_speed, 0)
+        count += 1
+
+    #lift the object
+    while(time_val < time_out):
+        time_val = count * dt
+        if saving_data:
+            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, motion_script, image_num, view_matrix, proj_matrix, imgs_dir)
+
+        p.stepSimulation()
+
+        grasp_helper(grasper1_ID, grasper2_ID, grasper_initial_height, graspers_distance, grasper_speed, 1)
+        count += 1
+
+    return image_num
+
+
+
 def let_time_pass(time_amount, pusherID, mobile_object_IDs, dt, fps, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None):
+    #for pusher
     count=0
     image_num = available_image_num + 0
     saving_data = not (view_matrix==None)
 
     while time_amount>0:
         time_val = count * dt
-        if saving_data and (time_val * fps - int(time_val * fps) < 0.0001):
-            for ID in mobile_object_IDs:
-                add_to_motion_script(ID, time_val, motion_script)
-
-            print_image(view_matrix, proj_matrix, imgs_dir, image_num)
-            image_num += 1
+        if saving_data:
+            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, motion_script, image_num, view_matrix, proj_matrix, imgs_dir)
         count += 1
 
         p.stepSimulation()
@@ -322,6 +404,10 @@ def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile
             point_index+=1
             #print(result)
 
+    indices_without_surface = np.where(segmentation_numpy != 0)
+    corrected_points = corrected_points[indices_without_surface]
+    segmentation_numpy = segmentation_numpy[indices_without_surface]
+
     for id in mobile_object_IDs:
         #based on https://gist.github.com/Shreeyak/9a4948891541cb32b501d058db227fff
         indicies_to_use = np.where(segmentation_numpy == id)
@@ -330,7 +416,7 @@ def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile
         np.savetxt(ply_file_path_no_extension + "_objID_"+str(id)+".ply", corrected_points_to_use, fmt='%f',
                    header=PLY_header_str(len(corrected_points_to_use)), comments='', encoding='utf-8')
 
-        indicies_obstacles = np.where(segmentation_numpy != id and segmentation_numpy != 0) #avoid the plane and the target object
+        indicies_obstacles = np.where(segmentation_numpy != id)
         corrected_points_obstacles = corrected_points[indicies_obstacles]
 
         # output to ply file

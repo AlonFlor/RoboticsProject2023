@@ -14,31 +14,33 @@ mobile_object_IDs = []
 mobile_object_types = []
 held_fixed_list = []
 
-fps = 24.
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 0, -75)
 
 
 
 class tree_node:
-    def __init__(self,parent, action):
+    def __init__(self,parent):
         self.parent = parent
         self.node_reward = 0.
         self.children = []
 
+
+
+        # make directory for simulation files
+        self.nodeNum = 1
+        while os.path.exists("node" + str(self.nodeNum)):
+            self.nodeNum += 1
+        self.node_dir = "node" + str(self.nodeNum)
+        os.mkdir(self.node_dir)
+
+    def apply_action(self, action):
         self.action_type, self.point_1, self.point_2 = action
         #action_type is either "push" or "grasp"
         #if it is "push", then point_1 is the pusher starting point, and point_2-point_1 forms the pushing vector
         #if it is "grasp", then point_1 and point_2 are the points of the grasp.
 
-        # make directory for simulation files
-        nodeNum = 1
-        while os.path.exists("node" + str(nodeNum)):
-            nodeNum += 1
-        self.node_dir = "node" + str(nodeNum)
-        os.mkdir(self.node_dir)
-
-    def apply_action(self):
-        binID = p_utils.open_saved_scene(os.path.join("scenes",f"scene_{9}_shifted_COM.csv"), self.node_dir, [], [], mobile_object_IDs, mobile_object_types, held_fixed_list)
+        #open scene before
+        binID = p_utils.open_saved_scene(os.path.join(self.parent.node_dir, "scene.csv"), self.node_dir, [], [], mobile_object_IDs, mobile_object_types, held_fixed_list)
 
         #create cylinder
         cylinder_radius = 0.01
@@ -55,23 +57,25 @@ class tree_node:
 
             p.resetBasePositionAndOrientation(cylinder2ID, self.point_2, (0., 0., 0., 1.))
 
-            #save scene before
-            p_utils.save_scene(os.path.join(self.node_dir,"scene_before.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
-
+            #grasp
             p_utils.grasp()
 
+            p.removeBody(cylinder2ID)
+
         else:
-
-            #save scene before
-            p_utils.save_scene(os.path.join(self.node_dir,"scene_before.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
-
+            #push
             pusher_end = self.point_2
-            p_utils.push(pusher_end, cylinderID, mobile_object_IDs, dt, fps)
+            p_utils.push(pusher_end, cylinderID, mobile_object_IDs, dt)
+
+        p.removeBody(cylinderID)
 
         #save scene after
-        p_utils.save_scene(os.path.join(self.node_dir,"scene_after.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
+        p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
+        p_utils.write_PLY_files(os.path.join(self.node_dir,str(self.nodeNum)), view_matrix, proj_matrix, mobile_object_IDs)
 
-        p_utils.write_PLY_files(os.path.join(self.node_dir,"scene_after"), view_matrix, proj_matrix, mobile_object_IDs)
+    def calculate_and_set_reward(self):
+        #calculate reward and set it. Then update rewards of parent nodes up the chain.
+        pass
 
 
     def generate_action_list(self):
@@ -86,11 +90,16 @@ class tree_node:
         #Use the placeholder method to make the code run while waiting for updates to the C++ code.
 
 
+'''
+Algorithm:
+1. generate a node using the constructor
+2. then run the action taken from its parent's action list in apply_action
+3. then find and apply the reward for that node and up its chain in calculate_and_set_reward
+4. then generate a new set of nodes using generate_action_list
+5. from all unexplored actions in all nodes, select an action.
+
+the root node can only do 1., 4., and 5.
+when parallelizing this code, 1., 2., and 4. can be done in parallel. We would need to change 5. to output a list of actions that will be explored simultaneously rather than one action.
+'''
+
 p.disconnect()
-
-
-#write motion script and shapes file
-file_handling.write_records_and_motion_script(shapes_list, test_dir, motion_script)
-
-#make a video from saved images
-#p_utils.make_video(test_dir,imgs_dir)
