@@ -234,3 +234,12 @@ def write_obj_and_mtl_one_frame(shapes_loc_data, masses_data, frictions_data, co
             for vertex_index in vertex_indices:
                 out_file.write(" " + str(vertex_index + vertices_index_shift[shape_count] + 1))
             out_file.write("\n")
+
+def copy_file(file_path, new_file_path):
+    file = open(file_path, 'r', encoding="utf-8")
+    contents = file.read()
+    file.close()
+
+    new_file = open(new_file_path, 'w', encoding="utf-8")
+    new_file.write(contents)
+    new_file.close()

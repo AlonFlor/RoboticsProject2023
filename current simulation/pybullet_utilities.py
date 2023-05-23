@@ -357,7 +357,7 @@ def PLY_header_str(num_points):
               + "end_header"
 
 
-def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile_object_IDs):
+def write_PLY_files(dest_dir, view_matrix, proj_matrix, mobile_object_IDs):
     w, h, RGBA, depth, segmentation_mask = p.getCameraImage(640, 480, view_matrix, proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
     segmentation_numpy = np.array(segmentation_mask).reshape((h*w))
     #RGBA_numpy = np.array(RGBA).reshape((h, w, 4))
@@ -418,16 +418,23 @@ def write_PLY_files(ply_file_path_no_extension, view_matrix, proj_matrix, mobile
         indicies_to_use = np.where(segmentation_numpy == id)
         corrected_points_to_use = corrected_points[indicies_to_use]
 
-        np.savetxt(ply_file_path_no_extension + "_objID_"+str(id)+".ply", corrected_points_to_use, fmt='%f',
+        np.savetxt(os.path.join(dest_dir,"objID_"+str(id)+".ply"), corrected_points_to_use, fmt='%f',
                    header=PLY_header_str(len(corrected_points_to_use)), comments='', encoding='utf-8')
 
         indicies_obstacles = np.where(segmentation_numpy != id)
         corrected_points_obstacles = corrected_points[indicies_obstacles]
 
         # output to ply file
-        np.savetxt(ply_file_path_no_extension+ "_objID_"+str(id)+"_obstacles.ply", corrected_points_obstacles, fmt='%f',
+        np.savetxt(os.path.join(dest_dir, "objID_"+str(id)+"_obstacles.ply"), corrected_points_obstacles, fmt='%f',
                    header=PLY_header_str(len(corrected_points_obstacles)), comments='', encoding='utf-8')
 
 def get_points_from_ply_files(points_file_path):
-    points = np.loadtxt(points_file_path,delimiter=" ",skiprows=37,max_rows=1556-37)[:,:3]
-    points
+
+    #all of this part just to find the number of lines, because numpy does not have functionality to detail how many rows to leave out at the end
+    points_file = open(points_file_path, "r", encoding="utf-8")
+    num_lines = len(points_file.readlines())
+    points_file.close()
+
+    header_size = 37
+    points = np.loadtxt(points_file_path,delimiter=" ",skiprows=header_size, max_rows=num_lines-header_size)[:,:3]
+    return points

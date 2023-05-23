@@ -65,7 +65,7 @@ image_num = p_utils.push(pusher_end, pusherID, dt, mobile_object_IDs, fps, view_
 
 #save scene after
 p_utils.save_scene(os.path.join(test_dir,"scene_after.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
-p_utils.write_PLY_files(os.path.join(test_dir,"scene_after"), view_matrix, proj_matrix, mobile_object_IDs)
+p_utils.write_PLY_files(test_dir, view_matrix, proj_matrix, mobile_object_IDs)
 
 
 p.disconnect()
@@ -75,4 +75,4 @@ p.disconnect()
 file_handling.write_records_and_motion_script(shapes_list, test_dir, motion_script)
 
 #make a video from saved images
-#p_utils.make_video(test_dir,imgs_dir)
+p_utils.make_video(test_dir,imgs_dir)
