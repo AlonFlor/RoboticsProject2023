@@ -5,6 +5,7 @@ import os
 import file_handling
 import make_URDF
 from PIL import Image
+#import cv2
 
 
 def load_object(name, test_dir, model_COM=(0.,0.,0.), useFixedBase=False):
@@ -357,6 +358,23 @@ def PLY_header_str(num_points):
               + "end_header"
 
 
+def PLY_header_str_extended(num_points):
+    return "ply\n"\
+              + "format ascii 1.0\n"\
+              + "comment point cloud generated from RGBD image taken in PyBullet simulation\n"\
+              + "element vertex " + str(num_points)+"\n"\
+              + "property float x\n"\
+              + "property float y\n"\
+              + "property float z\n"\
+              + "property float red\n"\
+              + "property float green\n"\
+              + "property float blue\n"\
+              + "property float nx\n"\
+              + "property float ny\n"\
+              + "property float nz\n"\
+              + "end_header"
+
+
 def write_PLY_files(dest_dir, view_matrix, proj_matrix, mobile_object_IDs):
     w, h, RGBA, depth, segmentation_mask = p.getCameraImage(640, 480, view_matrix, proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
     segmentation_numpy = np.array(segmentation_mask).reshape((h*w))
@@ -373,12 +391,8 @@ def write_PLY_files(dest_dir, view_matrix, proj_matrix, mobile_object_IDs):
     vm = np.array(view_matrix).reshape((4,4))
     tr = -vm.T[:3,3]
     R = vm.T[:3,:3]
-    print(tr)
-    print(R)
     fm = pm.T#np.matmul(pm, vm.T)
     fm_inv = np.linalg.inv(fm)
-    print(pm,"\n","\n",vm,"\n",fm)
-    print(fm_inv)
 
     # based on https://gist.github.com/Shreeyak/9a4948891541cb32b501d058db227fff
     pixel_x, pixel_y = np.meshgrid(np.linspace(-w/2, w/2 - 1, w), np.linspace(-h/2, h/2 - 1, h))
@@ -413,6 +427,8 @@ def write_PLY_files(dest_dir, view_matrix, proj_matrix, mobile_object_IDs):
     corrected_points = corrected_points[indices_without_surface]
     segmentation_numpy = segmentation_numpy[indices_without_surface]
 
+    #kernel = np.ones((3, 3), np.uint8) #to dilate images to find contour normals
+
     for id in mobile_object_IDs:
         #based on https://gist.github.com/Shreeyak/9a4948891541cb32b501d058db227fff
         indicies_to_use = np.where(segmentation_numpy == id)
@@ -421,20 +437,15 @@ def write_PLY_files(dest_dir, view_matrix, proj_matrix, mobile_object_IDs):
         np.savetxt(os.path.join(dest_dir,"objID_"+str(id)+".ply"), corrected_points_to_use, fmt='%f',
                    header=PLY_header_str(len(corrected_points_to_use)), comments='', encoding='utf-8')
 
-        indicies_obstacles = np.where(segmentation_numpy != id)
+        '''indicies_obstacles = np.where(segmentation_numpy != id)
         corrected_points_obstacles = corrected_points[indicies_obstacles]
 
         # output to ply file
         np.savetxt(os.path.join(dest_dir, "objID_"+str(id)+"_obstacles.ply"), corrected_points_obstacles, fmt='%f',
-                   header=PLY_header_str(len(corrected_points_obstacles)), comments='', encoding='utf-8')
+                   header=PLY_header_str(len(corrected_points_obstacles)), comments='', encoding='utf-8')'''
 
-def get_points_from_ply_files(points_file_path):
-
-    #all of this part just to find the number of lines, because numpy does not have functionality to detail how many rows to leave out at the end
-    points_file = open(points_file_path, "r", encoding="utf-8")
-    num_lines = len(points_file.readlines())
-    points_file.close()
-
+def get_points_from_ply_file(points_file_path):
     header_size = 37
-    points = np.loadtxt(points_file_path,delimiter=" ",skiprows=header_size, max_rows=num_lines-header_size)[:,:3]
+    #note: the final row is not a point and should be discarded
+    points = np.loadtxt(points_file_path,delimiter=" ",skiprows=header_size, usecols=range(9))
     return points
