@@ -19,10 +19,6 @@ physicsClient = p.connect(p.DIRECT)
 p.setGravity(0, 0, -9.8)
 dt = 1./240.
 
-mobile_object_IDs = []
-mobile_object_types = []
-held_fixed_list = []
-
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 0, -75)
 
 push_distance = 0.1
@@ -36,12 +32,14 @@ explore_factor = 0.5
 
 maximum_depth = 5
 
+image_num = 0
+
 
 class node:
     def __init__(self,parent, action=None):
         self.parent = parent
         self.action_to_get_here = action
-        self.node_reward = 0.
+        self.node_reward = None
         self.sum_of_rewards = 0.
         self.number_of_visits = 0
         self.children = []
@@ -91,13 +89,21 @@ class node:
         return -1
 
     def apply_action(self):
+        #do not repeat actions
+        if self.node_reward is not None:
+            return
 
         reward = 0.
+
+        self.mobile_object_IDs = []
+        self.mobile_object_types = []
+        self.held_fixed_list = []
 
         #steps to skip if this is the root node
         if self.action_to_get_here is not None:
             #open scene before
-            binID = p_utils.open_saved_scene(os.path.join(self.parent.node_dir, "scene.csv"), self.node_dir, [], [], mobile_object_IDs, mobile_object_types, held_fixed_list)
+            binID = p_utils.open_saved_scene(os.path.join(self.parent.node_dir, "scene.csv"),
+                                             self.node_dir, [], [], self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
 
             self.action_type, self.point_1, self.point_2 = self.action_to_get_here
             #action_type is either "push" or "grasp"
@@ -145,28 +151,31 @@ class node:
                 #TODO    so make the filtering-for-pushing step happen after splitting the points into for-pushing and for-grasping.
                 actual_push_distance = np.linalg.norm(np.array(cylinder_new_point) - np.array(cylinder_original_point))
                 if actual_push_distance < push_distance:
-                    self.node_reward = -10
+                    reward = -10
                     #TODO mark this node a dead end please
 
             p.removeBody(cylinderID)
 
             #save scene after
-            p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
+            p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
         else:
             #open scene in root node
-            p_utils.open_saved_scene(os.path.join(self.node_dir, "scene.csv"), self.node_dir, [], [], mobile_object_IDs, mobile_object_types, held_fixed_list)
+            p_utils.open_saved_scene(os.path.join(self.node_dir, "scene.csv"), self.node_dir, [], [], self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
 
-        #TODO: delete this
-        target_pos, _ = p.getBasePositionAndOrientation(mobile_object_IDs[0])
+        #TODO: delete this separated block of code
+        target_pos, _ = p.getBasePositionAndOrientation(self.mobile_object_IDs[0])
         if np.linalg.norm(np.array(target_pos) - np.array([-0.1, 0., target_pos[2]])) < 0.03:
             reward+=100.
-        p_utils.print_image(view_matrix,proj_matrix,self.node_dir,0)
+        global image_num
+        p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
+        image_num+=1
 
-        p_utils.write_PLY_files(self.node_dir, view_matrix, proj_matrix, mobile_object_IDs)
+        p_utils.write_PLY_files(self.node_dir, view_matrix, proj_matrix, self.mobile_object_IDs)
         self.officially_unexplored_actions = self.generate_action_list()
         p.resetSimulation()
 
-        return reward
+        self.node_reward = reward
+
 
     def back_propagate(self, reward):
         #update sum of rewards and number of times visited, for this node and for its parent nodes up the tree to the root.
@@ -177,12 +186,14 @@ class node:
 
 
     def generate_action_list(self):
+        global image_num
         if self.depth == maximum_depth:
+            image_num+=9 #TODO delete this when taking these images is no longer necessary
             return []
 
         candidate_list = []
 
-        for id in mobile_object_IDs:
+        for id in self.mobile_object_IDs:
             basic_id_ply_str = "objID_"+str(id)
 
             id_ply_str = os.path.join(self.node_dir, basic_id_ply_str+".ply")
@@ -268,7 +279,9 @@ class node:
             else:
                 p.removeBody(point_id)
 
-        p_utils.print_image(view_matrix, proj_matrix, self.node_dir, 1)
+        #global image_num
+        p_utils.print_image(view_matrix, proj_matrix, test_dir, image_num)
+        image_num+=9
 
         pushing_points_ply_path_str = os.path.join(self.node_dir, "pushing_points.ply")
         list_to_export = np.array(list_to_export)
@@ -306,16 +319,14 @@ Create root node, then repeat:
         if the selected node has no actions and no children, exit the loop.
     2. generate a node and remove an unexplored action using create_child
     3. For the newly created node n:
-        3a. run the action taken from its parent using apply_action, save the reward in a variable, save the unexplored actions in the node
-        3b. Repeat:
-            3ba. from the current node's unexplored actions, create an unrecognized child using create_or_open_unrecognized_child, and temporarily make that node the new current node
-            if that child already exists:
-                3bb. run the action taken from its parent using apply_action, and save the reward in a variable, save the unexplored actions in the node.
-                    If that list is empty, end the loop.
-            else:
-                3bc. get the reward and unexplored actions of the existing unrecognized child node
-        3c. take the reward saved from 3a, 3bb, or 3bc (there should only be one variable that gets overwritten whenever 3bb or 3bc are called), and set node_reward for n to that value
-        3d. then update the sum of rewards and the number of times visited for node n and up its chain by calling back_propagate for node n
+        3a. run the action taken from its parent using apply_action, save the reward and the unexplored actions in the node. Set the current node to be n
+        3b. Repeat while the current node's unexplored actions is not an empty list:
+            3ba. from the current node's unexplored actions, create or open an unrecognized child using create_or_open_unrecognized_child,
+                and set the current node to that node
+            3bb. run the action taken from its parent using apply_action, and save the reward and the unexplored actions in the node.
+                If the current node already existed, apply_action will not do anything.
+        3c. update the sum of rewards and the number of times visited for node n and up its chain by calling back_propagate for node n,
+            passing it the node reward of the last node called in the loop
 Return the action_to_get_here of the direct child of the root that has the highest reward.
 
 To create the root node, call the constructor, then apply_action.
@@ -332,9 +343,8 @@ Step 2 is run serially, to avoid collisions/race conditions in numbering the nod
     It returns a list of newly created child nodes for steps 3a and 3b.
 Step 3a is run in parallel, one process per node from the list from step 2.
 Step 3ba is run serially, to avoid collisions/race conditions in numbering the node files.
-Steps 3bb and 3bc (and the if-else statement enclosing them) are run in parallel, picking up on the same processes used for 3a.
-3c is is run in parallel, picking up on the same processes used for 3a, 3bb, and 3bc.
-3d is run serially, to avoid race conditions in updating rewards and number of times visited up the chain.
+Step 3bb is run in parallel, picking up on the same processes used for 3a.
+3c is run serially, to avoid race conditions in updating rewards and number of times visited up the chain.
 '''
 
 root_node = node(None)
@@ -349,13 +359,15 @@ while True:
         break
     node_to_expand.create_child()
     n = node_to_expand.children[-1]
-    reward = n.apply_action()
+    print("child:",n.nodeNum)
+    n.apply_action()
     current_node = n
     while len(current_node.officially_unexplored_actions) != 0:
         unrecognized_child_index = current_node.create_or_open_unrecognized_child()
         current_node = current_node.unrecognized_children[unrecognized_child_index][1]
-        reward = current_node.apply_action()
-    n.back_propagate(reward)
+        print("unrecognized child:", current_node.nodeNum)
+        current_node.apply_action()
+    n.back_propagate(current_node.node_reward)
 
 '''start = np.array([0.15,0.,0.02])
 end = np.array([start[0]-0.25, start[1], start[2]])

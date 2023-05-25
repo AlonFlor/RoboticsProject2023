@@ -376,10 +376,15 @@ def PLY_header_str_extended(num_points):
 
 
 def write_PLY_files(dest_dir, view_matrix, proj_matrix, mobile_object_IDs):
-    w, h, RGBA, depth, segmentation_mask = p.getCameraImage(640, 480, view_matrix, proj_matrix, renderer=p.ER_BULLET_HARDWARE_OPENGL)
+    w, h, RGBA, depth, segmentation_mask = p.getCameraImage(640, 480, view_matrix, proj_matrix, renderer=p.ER_TINY_RENDERER)
     segmentation_numpy = np.array(segmentation_mask).reshape((h*w))
     #RGBA_numpy = np.array(RGBA).reshape((h, w, 4))
     depth_numpy = np.array(depth).reshape((h,w))
+
+    img_numpy = np.array(RGBA).reshape((h, w, 4))
+    img = Image.fromarray(img_numpy, "RGBA")
+    image_filename = os.path.join(dest_dir, str(0).zfill(4) + ".png")
+    img.save(image_filename)
 
     #using same hard-coded values as those in set_up_camera to create proj matrix
     near = 0.001
@@ -434,8 +439,9 @@ def write_PLY_files(dest_dir, view_matrix, proj_matrix, mobile_object_IDs):
         indicies_to_use = np.where(segmentation_numpy == id)
         corrected_points_to_use = corrected_points[indicies_to_use]
 
-        np.savetxt(os.path.join(dest_dir,"objID_"+str(id)+".ply"), corrected_points_to_use, fmt='%f',
-                   header=PLY_header_str(len(corrected_points_to_use)), comments='', encoding='utf-8')
+        if len(corrected_points_to_use) > 0:
+            np.savetxt(os.path.join(dest_dir,"objID_"+str(id)+".ply"), corrected_points_to_use, fmt='%f',
+                       header=PLY_header_str(len(corrected_points_to_use)), comments='', encoding='utf-8')
 
         '''indicies_obstacles = np.where(segmentation_numpy != id)
         corrected_points_obstacles = corrected_points[indicies_obstacles]
