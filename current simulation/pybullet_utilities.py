@@ -424,6 +424,7 @@ def write_PLY_files(dest_dir, view_matrix, proj_matrix, mobile_object_IDs):
             #set points to world coordinates
             result += tr
             result = np.matmul(R, result)
+            result[1]*=-1 #reflect across x axis
             corrected_points[point_index] = result
             point_index+=1
             #print(result)
