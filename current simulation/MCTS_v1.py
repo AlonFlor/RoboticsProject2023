@@ -25,14 +25,22 @@ push_distance = 0.1
 reward_discount = 0.9
 
 #pushing_points_per_object = 40.
-pushing_point_spacing = 0.04
+precomputed_pushing_points_and_point_pairs = {}
 pushing_point_free_space_radius = 0.015 / 2
-pushing_point_displacement = 2.1*pushing_point_free_space_radius
 explore_factor = 0.5
 
 maximum_depth = 5
 
 image_num = 0
+
+def precompute_pushing_points_and_point_pairs(object_type, object_com):
+    #Points should be an np array, edges should be a list of indices.
+    #TODO: replace this with more systematic code
+    precomputed_points_file = os.path.join("object models",object_type,"precomputed_pushing_points.csv")
+    precomputed_pushing_points = np.array(file_handling.read_csv_file(precomputed_points_file, [float, float, float]))
+    precomputed_pushing_points -= object_com
+    edges = [(0,1),(2,3),(4,5)]
+    return precomputed_pushing_points,edges
 
 
 class node:
@@ -59,6 +67,7 @@ class node:
         self.node_dir = node_dir_path
         os.mkdir(self.node_dir)
 
+
     def create_child(self):
         #get the action
         action = self.officially_unexplored_actions.pop(0)
@@ -76,6 +85,7 @@ class node:
         #If the child was not created in simulation, then create it.
         self.children.append(node(self, action))
 
+
     def create_or_open_unrecognized_child(self):
         #This function is for simulation rollouts. Create a child if it does not exist. Return its index if it did already exist, -1 otherwise.
         index = random.randrange(len(self.officially_unexplored_actions))   #randomly select an action
@@ -88,6 +98,37 @@ class node:
         self.unrecognized_children.append([index, node(self, action)])
         return -1
 
+
+    def set_up_root_node(self):
+        # open scene in root node
+        self.mobile_object_IDs = []
+        self.mobile_object_types = []
+        self.held_fixed_list = []
+        scene_path = os.path.join(self.node_dir, "scene.csv")
+        p_utils.open_saved_scene(scene_path, self.node_dir, [], [], self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
+
+        #get the COMs of the objects, which are needed for precomputed pushing points
+        object_coms = []
+        scene_data = file_handling.read_csv_file(scene_path,[str, float, float, float, float, float, float, float, float, float, float, int])
+        for row in scene_data[1:]:
+            object_coms.append(np.array([row[1],row[2],row[3]]))
+
+        #set up precomputed pushing points for all objects in the scene
+        for i in np.arange(len(self.mobile_object_IDs)):
+            object_type = self.mobile_object_types[i]
+            object_com = object_coms[i]
+            if precomputed_pushing_points_and_point_pairs.get(object_type) is None:
+                precomputed_pushing_points_and_point_pairs[object_type] = precompute_pushing_points_and_point_pairs(object_type, object_com)
+
+        '''#TODO: delete this separated block of code
+        global image_num
+        p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
+        image_num+=1'''
+
+        self.officially_unexplored_actions = self.generate_action_list()
+        p.resetSimulation()
+
+
     def apply_action(self):
         #do not repeat actions
         if self.node_reward is not None:
@@ -99,79 +140,65 @@ class node:
         self.mobile_object_types = []
         self.held_fixed_list = []
 
-        #steps to skip if this is the root node
-        if self.action_to_get_here is not None:
-            #open scene before
-            binID = p_utils.open_saved_scene(os.path.join(self.parent.node_dir, "scene.csv"),
-                                             self.node_dir, [], [], self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
+        #open scene before
+        binID = p_utils.open_saved_scene(os.path.join(self.parent.node_dir, "scene.csv"), self.node_dir, [], [], self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
 
-            self.action_type, self.point_1, self.point_2 = self.action_to_get_here
-            #action_type is either "push" or "grasp"
-            #if it is "push", then point_1 is the pusher starting point, and point_2-point_1 forms the pushing vector
-            #if it is "grasp", then point_1 and point_2 are the points of the grasp.
+        self.action_type, self.point_1, self.point_2 = self.action_to_get_here
+        #action_type is either "push" or "grasp"
+        #if it is "push", then point_1 is the pusher starting point, and point_2-point_1 forms the pushing vector
+        #if it is "grasp", then point_1 and point_2 are the points of the grasp.
 
+        unsuccessful_push = False
 
-            #create cylinder
-            cylinder_radius = 0.01
-            cylinder_height = 0.1
-            cylinder_shapeID = p.createCollisionShape(p.GEOM_CYLINDER, radius=cylinder_radius, height=cylinder_height)
-            cylinder_visual_shapeID = p.createVisualShape(p.GEOM_CYLINDER, radius=cylinder_radius, length=cylinder_height)
-            cylinderID = p.createMultiBody(1., cylinder_shapeID, cylinder_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
+        #create cylinder
+        cylinder_radius = 0.01
+        cylinder_height = 0.1
+        cylinder_shapeID = p.createCollisionShape(p.GEOM_CYLINDER, radius=cylinder_radius, height=cylinder_height)
+        cylinder_visual_shapeID = p.createVisualShape(p.GEOM_CYLINDER, radius=cylinder_radius, length=cylinder_height)
+        cylinderID = p.createMultiBody(1., cylinder_shapeID, cylinder_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
 
-            p.resetBasePositionAndOrientation(cylinderID, self.point_1, (0., 0., 0., 1.))
+        p.resetBasePositionAndOrientation(cylinderID, self.point_1, (0., 0., 0., 1.))
 
-            if self.action_type == "grasp":
-                #TODO replace this with actual robot grasp
-                '''#create second cylinder for grasping
-                cylinder2ID = p.createMultiBody(1., cylinder_shapeID, cylinder_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
-    
-                p.resetBasePositionAndOrientation(cylinder2ID, self.point_2, (0., 0., 0., 1.))
-    
-                #grasp
-                p_utils.grasp()
-    
-                p.removeBody(cylinder2ID)'''
-                reward = 100. #congratulations on being able to grasp!
-                #TODO check for successful grasp before giving award
-
-            else:
-                #push
-                #TODO replace this with actual robot push
-                push_vector = self.point_2 - self.point_1
-                push_vector = push_distance * push_vector / np.linalg.norm(push_vector)
-                pusher_end = self.point_1 + push_vector
-                cylinder_original_point, _ = p.getBasePositionAndOrientation(cylinderID)
-                p_utils.push(pusher_end, cylinderID, dt, time_out=2.)
-                cylinder_new_point, _ = p.getBasePositionAndOrientation(cylinderID)
-
-                #TODO if we are not filtering points by free space when selecting actions, some pushes will be dead ends.
-                #TODO If they are, the action that opened that node was impermissable, so it will be enforced that this node will have no child nodes.
-                #TODO I think it is better to filter points by free space ahead of time, to prevent the waste of simulating these dead ends
-                #TODO Note: if we are filtering points, a point that would fail for pushing might still work for grasping,
-                #TODO    so make the filtering-for-pushing step happen after splitting the points into for-pushing and for-grasping.
-                actual_push_distance = np.linalg.norm(np.array(cylinder_new_point) - np.array(cylinder_original_point))
-                if actual_push_distance < push_distance:
-                    reward = -10
-                    #TODO mark this node a dead end please
-
-            p.removeBody(cylinderID)
-
-            #save scene after
-            p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
+        if self.action_type == "grasp":
+            #TODO replace this with actual robot grasp?
+            reward = 100. #congratulations on being able to grasp!
         else:
-            #open scene in root node
-            p_utils.open_saved_scene(os.path.join(self.node_dir, "scene.csv"), self.node_dir, [], [], self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
+            #push
+            #TODO replace this with actual robot push?
+            push_vector = self.point_2 - self.point_1
+            push_vector = push_distance * push_vector / np.linalg.norm(push_vector)
+            pusher_end = self.point_1 + push_vector
+            cylinder_original_point, _ = p.getBasePositionAndOrientation(cylinderID)
+            p_utils.push(pusher_end, cylinderID, dt, time_out=2.)
+            cylinder_new_point, _ = p.getBasePositionAndOrientation(cylinderID)
+
+            #see if the push was successful or not, by seeing if the pusher moved even a tenth of the requested amount.
+            actual_push_distance = np.linalg.norm(np.array(cylinder_new_point) - np.array(cylinder_original_point))
+            if actual_push_distance < 0.1*push_distance:
+                reward = -10
+                unsuccessful_push = True
+                # since actual_push_distance < 0.1*push_distance, the push failed, so this node should not have been opened/existed.
+                # Since this node should not have existed, it should at least be a dead end with no further actions to be taken.
+                # By setting unsuccessful_push=True, this node is marked as a dead end.
+
+        p.removeBody(cylinderID)
+
+        #save scene after
+        p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
 
         #TODO: delete this separated block of code
         target_pos, _ = p.getBasePositionAndOrientation(self.mobile_object_IDs[0])
         if np.linalg.norm(np.array(target_pos) - np.array([-0.1, 0., target_pos[2]])) < 0.03:
             reward+=100.
-        global image_num
+        '''global image_num
         p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
-        image_num+=1
+        image_num+=1'''
 
-        p_utils.write_PLY_files(self.node_dir, view_matrix, proj_matrix, self.mobile_object_IDs)
-        self.officially_unexplored_actions = self.generate_action_list()
+        if self.action_type == "push":
+            if not unsuccessful_push:
+                self.officially_unexplored_actions = self.generate_action_list()
+            else:
+                print("push failed")
         p.resetSimulation()
 
         self.node_reward = reward
@@ -193,95 +220,67 @@ class node:
 
         candidate_list = []
 
-        for id in self.mobile_object_IDs:
-            basic_id_ply_str = "objID_"+str(id)
+        for i in np.arange(len(self.mobile_object_IDs)):
+            id = self.mobile_object_IDs[i]
+            position, orientation = p.getBasePositionAndOrientation(id)
+            object_type = self.mobile_object_types[i]
 
-            id_ply_str = os.path.join(self.node_dir, basic_id_ply_str+".ply")
-            #id_ply_obstacles_str = os.path.join(self.node_dir, basic_id_ply_str+"_obstacles.ply")
-            id_ply_with_normals_str = os.path.join(self.node_dir, basic_id_ply_str+"_with_normals.ply")
-            #id_ply_obstacles_with_normals_str = os.path.join(self.node_dir, basic_id_ply_str+"_obstacles_with_normals.ply")
+            points, edges = precomputed_pushing_points_and_point_pairs[object_type]
+            transformed_points = np.zeros_like(points)
+            for point_index in np.arange(points.shape[0]):
+                transformed_points[point_index] = p_utils.rotate_vector(points[point_index], orientation) + position
+                #precomputed pushing points are already transformed by COM when loaded, so only transforming them here by object position and orientation
+            for point1_index, point2_index in edges:
+                # every single pushing point has a partner in an edge. Therefore, pushing points and their directions are calculated by edge.
+                point_1 = transformed_points[point1_index]
+                point_2 = transformed_points[point2_index]
+                if point_1[2]>pushing_point_free_space_radius:
+                    candidate_list.append((point_1, point_2))
+                if point_2[2]>pushing_point_free_space_radius:
+                    candidate_list.append((point_2, point_1))
 
-            pcl_get_normals_command = "\"candidate pushing points code\\out\\build\\x64-Release\\pclnormal.exe\" " + id_ply_str + " " + id_ply_with_normals_str
-            print(pcl_get_normals_command)
-            os.popen(pcl_get_normals_command)
-
-            file_handling.wait_for_file(id_ply_with_normals_str)
-
-            #select points
-
-            '''pcl_get_normals_command = "\"candidate pushing points code\\out\\build\\x64-Release\\pclnormal.exe\" " + id_ply_obstacles_str + " " + id_ply_obstacles_with_normals_str
-            print(pcl_get_normals_command)
-            os.popen(pcl_get_normals_command)
-            file_handling.wait_for_file(id_ply_obstacles_with_normals_str)
-
-            id_ply_pushing_points_str = os.path.join(self.node_dir, basic_id_ply_str+"_pushing_points.ply")
-            pcl_pushing_points_command = "\"candidate pushing points code\\out\\build\\x64-Release\\pclpush.exe\" "\
-                                         + id_ply_with_normals_str + " " + id_ply_obstacles_with_normals_str + " " + id_ply_pushing_points_str
-            print(pcl_pushing_points_command)
-            os.popen(pcl_pushing_points_command)
-            file_handling.wait_for_file(id_ply_pushing_points_str)'''
-
-            '''id_ply_downsampled_points_str = os.path.join(self.node_dir, basic_id_ply_str+"_down_sampled_points.ply")
-            pcl_down_sample_command = "\"candidate pushing points code\\out\\build\\x64-Release\\pclsample.exe\" "\
-                                      + id_ply_with_normals_str + f" {pushing_point_spacing} " + id_ply_downsampled_points_str
-            print(pcl_down_sample_command)
-            os.popen(pcl_down_sample_command)
-            file_handling.wait_for_file(id_ply_downsampled_points_str)'''
-
-            points = p_utils.get_points_from_ply_file(id_ply_with_normals_str)[:-1]
-            #points = p_utils.get_points_from_ply_file(id_ply_downsampled_points_str)[:-1]
-            points2 = np.copy(points)
-
-            #move points out
-            for i in np.arange(len(points)):
-                new_2D_normal = np.array([points[i][6], points[i][7], 0.])
-                new_2D_normal /= np.linalg.norm(new_2D_normal)
-
-                points[i][:3] += pushing_point_displacement * new_2D_normal
-                points2[i][:3] -= pushing_point_displacement * new_2D_normal
-
-                points[i][6:9] = new_2D_normal
-                points2[i][6:9] = -new_2D_normal
-
-            points_sum = np.concatenate([points,points2], axis=0)
-
-            id_ply_shifted_points_str = os.path.join(self.node_dir, basic_id_ply_str+"_shifted_points.ply")
-            np.savetxt(id_ply_shifted_points_str, points_sum, fmt='%f', header=p_utils.PLY_header_str_extended(len(points_sum)), comments='', encoding='utf-8')
-
-
-            id_ply_downsampled_points_str = os.path.join(self.node_dir, basic_id_ply_str + "_down_sampled_points.ply")
-            pcl_down_sample_command = "\"candidate pushing points code\\out\\build\\x64-Release\\pclsample.exe\" " \
-                                      + id_ply_shifted_points_str + f" {pushing_point_spacing} " + id_ply_downsampled_points_str
-            print(pcl_down_sample_command)
-            os.popen(pcl_down_sample_command)
-            file_handling.wait_for_file(id_ply_downsampled_points_str)
-
-            points = p_utils.get_points_from_ply_file(id_ply_downsampled_points_str)[:-1]
-            for i in np.arange(len(points)):
-                candidate_list.append((points[i][:3], points[i][:3] - points[i][6:9])) #second point is first point pushed away from normal.
-                # TODO: make the second point the pair partner of the first point instead.
-
+        #add the pushing points as shapes for collision checking. Invalid pushing points are filtered out.
         point_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=pushing_point_free_space_radius)
         point_collision_IDs = []
-        for i,point_and_normal in enumerate(candidate_list):
-            point, normal = point_and_normal
+        for i,point_pair in enumerate(candidate_list):
+            point, _ = point_pair #the first point of each pair is the point where the pusher will start, and therefore it is the point to check for collisions with objects.
             point_id = p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=point)
             point_collision_IDs.append(point_id)
         p.performCollisionDetection()
 
+        '''#global image_num
+        #TODO delete this when taking these images is no longer necessary
+        p_utils.print_image(view_matrix, proj_matrix, test_dir, image_num)
+        image_num+=1'''
+
+        #filter the pushing points. If any pushing point's sphere overlaps with an object, that point is out. Pushing points may overlap with each other.
+        #TODO: check that this works. Pushing points fully enclosed by objects should have contact with them. contact[2] should give the id of the second body.
         filtered_candidate_list = []
         list_to_export = []
         for i,point_id in enumerate(point_collision_IDs):
             contact_results = p.getContactPoints(point_id)
             if len(contact_results)==0:
+                add_point=True
+            else:
+                add_point = True
+                for contact in contact_results:
+                    if contact[2] not in point_collision_IDs:
+                        add_point = False
+                        break
+            if add_point:
                 filtered_candidate_list.append(("push", candidate_list[i][0], candidate_list[i][1]))
                 list_to_export.append(candidate_list[i][0])
             else:
                 p.removeBody(point_id)
 
-        #global image_num
+        #TODO add a function to check if two accepted points who are in the same edge can be a grasp action.
+        # Criteria are that both points are within a maximum distance, and both points are not too close to the center of particularly large faces.
+        # The second criterion might be pre-computed, in which case the edge would be pre-marked as "cannot be used for a grasp" (the actual designation would be shorter).
+
+        '''#global image_num
+        #TODO delete this when taking these images is no longer necessary
         p_utils.print_image(view_matrix, proj_matrix, test_dir, image_num)
-        image_num+=9
+        image_num+=8'''
 
         pushing_points_ply_path_str = os.path.join(self.node_dir, "pushing_points.ply")
         list_to_export = np.array(list_to_export)
@@ -289,11 +288,6 @@ class node:
 
         return filtered_candidate_list
 
-
-        #TODO There should only be one cpp file that handles everything done here from when the first PLY file is printed until it is retrieved again.
-        #TODO Have Eric change his code so that a single PLY file come in, with points labeled by object ID or an ID for the background, and out comes a PLY file with points and edges.
-        #TODO each edge is two possible pushing actions (point_1, point_2) and (point_2, point_1)
-        #TODO points not assigned to edges need a normal to generate their counterpart point for pushing.
 
     def select_node_to_expand(self, explore_factor):
         #If a node is childless, select that node. Unrecognized children have never been officially visited, so they do not count as children here.
@@ -327,9 +321,9 @@ Create root node, then repeat:
                 If the current node already existed, apply_action will not do anything.
         3c. update the sum of rewards and the number of times visited for node n and up its chain by calling back_propagate for node n,
             passing it the node reward of the last node called in the loop
-Return the action_to_get_here of the direct child of the root that has the highest reward.
+Return the action_to_get_here of the direct child of the root that has the highest sum of rewards.
 
-To create the root node, call the constructor, then apply_action.
+To create the root node, call the constructor, then set_up_root_node.
 
 
 
@@ -350,24 +344,43 @@ Step 3bb is run in parallel, picking up on the same processes used for 3a.
 root_node = node(None)
 #load a scene to the node
 file_handling.copy_file(os.path.join("scenes",f"scene_{9}_shifted_COM.csv"), os.path.join(root_node.node_dir, "scene.csv"))
-root_node.apply_action()
-#root_node.create_child()
+root_node.set_up_root_node()
 
+official_child_expansion_count = 0
+total_expansion_count = 0
 while True:
     node_to_expand = root_node.select_node_to_expand(explore_factor)
     if len(node_to_expand.children)==0 and len(node_to_expand.officially_unexplored_actions)==0:
         break
+    official_child_expansion_count += 1
+    total_expansion_count += 1
+
     node_to_expand.create_child()
     n = node_to_expand.children[-1]
     print("child:",n.nodeNum)
     n.apply_action()
     current_node = n
     while len(current_node.officially_unexplored_actions) != 0:
+        total_expansion_count += 1
+
         unrecognized_child_index = current_node.create_or_open_unrecognized_child()
         current_node = current_node.unrecognized_children[unrecognized_child_index][1]
         print("unrecognized child:", current_node.nodeNum)
         current_node.apply_action()
     n.back_propagate(current_node.node_reward)
+
+print(f"expanded {official_child_expansion_count} recognized children")
+print(f"expanded {total_expansion_count} nodes in total")
+print("Note: for both of these numbers, repeats were not factored out")
+
+action_to_take = None
+best_sum_of_rewards = 0
+for child in root_node.children:
+    if child.sum_of_rewards > best_sum_of_rewards:
+        action_to_take = child.action_to_get_here
+        best_sum_of_rewards = child.sum_of_rewards
+print("action to take in root node:",action_to_take)
+print("sum of rewards:",best_sum_of_rewards)
 
 '''start = np.array([0.15,0.,0.02])
 end = np.array([start[0]-0.25, start[1], start[2]])

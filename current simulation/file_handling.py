@@ -244,17 +244,3 @@ def copy_file(file_path, new_file_path):
     new_file = open(new_file_path, 'w', encoding="utf-8")
     new_file.write(contents)
     new_file.close()
-
-
-def wait_for_file(file_path):
-    time_waited = 0.
-    while not os.path.exists(file_path):
-        time.sleep(0.001)  # time for the file to be created
-        time_waited += 0.001
-    size = os.stat(file_path).st_size
-    new_size = size * 2
-    while new_size - size > 0 or new_size == 0:
-        size = new_size + 0
-        time.sleep(0.1)  # time for the file to be fully created
-        time_waited += 0.1
-        new_size = os.stat(file_path).st_size

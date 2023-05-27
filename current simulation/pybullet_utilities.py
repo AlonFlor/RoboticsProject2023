@@ -262,7 +262,7 @@ def quaternion_multiplication(q1, q2):
     v1 = np.array([q1[0], q1[1], q1[2]])
     v2 = np.array([q2[0], q2[1], q2[2]])
     v_ans = r1*v2 + r2*v1 + np.cross(v1,v2)
-    return (v_ans[0], v_ans[1], v_ans[2], r1*r2 - np.dot(v1,v2))
+    return np.array([v_ans[0], v_ans[1], v_ans[2], r1*r2 - np.dot(v1,v2)])
 
 def rotate_vector(vec, quat):
     quat_inv = (-quat[0],-quat[1],-quat[2],quat[3])
@@ -381,10 +381,10 @@ def write_PLY_files(dest_dir, view_matrix, proj_matrix, mobile_object_IDs):
     #RGBA_numpy = np.array(RGBA).reshape((h, w, 4))
     depth_numpy = np.array(depth).reshape((h,w))
 
-    img_numpy = np.array(RGBA).reshape((h, w, 4))
+    '''img_numpy = np.array(RGBA).reshape((h, w, 4))
     img = Image.fromarray(img_numpy, "RGBA")
     image_filename = os.path.join(dest_dir, str(0).zfill(4) + ".png")
-    img.save(image_filename)
+    img.save(image_filename)'''
 
     #using same hard-coded values as those in set_up_camera to create proj matrix
     near = 0.001
