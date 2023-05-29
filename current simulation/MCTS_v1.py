@@ -27,7 +27,7 @@ reward_discount = 0.9
 #pushing_points_per_object = 40.
 precomputed_pushing_points_and_point_pairs = {}
 pushing_point_free_space_radius = 0.015 / 2
-explore_factor = 0.5
+explore_factor = 1.#0.5
 
 maximum_depth = 5
 
@@ -92,7 +92,8 @@ class node:
 
         unofficially_explored_action_indices = [i for i,child in self.unrecognized_children]
         if index in unofficially_explored_action_indices:
-            return self.unrecognized_children.index(index)
+            i = unofficially_explored_action_indices.index(index)
+            return i
 
         action = self.officially_unexplored_actions[index]
         self.unrecognized_children.append([index, node(self, action)])
@@ -348,6 +349,7 @@ root_node.set_up_root_node()
 
 official_child_expansion_count = 0
 total_expansion_count = 0
+official_child_redo_count = 0
 while True:
     node_to_expand = root_node.select_node_to_expand(explore_factor)
     if len(node_to_expand.children)==0 and len(node_to_expand.officially_unexplored_actions)==0:
@@ -358,6 +360,8 @@ while True:
     node_to_expand.create_child()
     n = node_to_expand.children[-1]
     print("child:",n.nodeNum)
+    if n.nodeNum < total_expansion_count:
+        official_child_redo_count+=1
     n.apply_action()
     current_node = n
     while len(current_node.officially_unexplored_actions) != 0:
@@ -372,6 +376,7 @@ while True:
 print(f"expanded {official_child_expansion_count} recognized children")
 print(f"expanded {total_expansion_count} nodes in total")
 print("Note: for both of these numbers, repeats were not factored out")
+print("Estimate for nodes officially expanded more than once:",official_child_redo_count)
 
 action_to_take = None
 best_sum_of_rewards = 0
@@ -382,10 +387,7 @@ for child in root_node.children:
 print("action to take in root node:",action_to_take)
 print("sum of rewards:",best_sum_of_rewards)
 
-'''start = np.array([0.15,0.,0.02])
-end = np.array([start[0]-0.25, start[1], start[2]])
-node1 = node(root_node, ("push", start, end))
-node1.apply_action()'''
+
 
 
 '''For timing purposes. Copy where needed, perhaps to a single round of apply_action and generate_action_list:
