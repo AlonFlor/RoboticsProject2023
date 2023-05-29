@@ -33,7 +33,7 @@ precomputed_pushing_points_and_point_pairs = {}
 pushing_point_free_space_radius = 0.015 / 2
 explore_factor = 1.#0.5
 
-maximum_depth = 5
+maximum_depth = 3#5
 
 image_num = 0
 
