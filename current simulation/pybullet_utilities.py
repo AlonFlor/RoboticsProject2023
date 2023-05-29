@@ -308,6 +308,20 @@ def open_saved_scene(scene_file, test_dir, shapes_list, motion_script, mobile_ob
     return binID
 
 
+def open_saved_scene_existing_objects(scene_file,mobile_object_IDs):
+    scene_data = file_handling.read_csv_file(scene_file, [str, float, float, float, float, float, float, float, float, float, float, int])
+
+    mobile_object_count = 0
+    for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
+        if object_type=="bin":
+            pass #assume bin has already been made and is immovable
+        else:
+            objectID = mobile_object_IDs[mobile_object_count]
+            p.resetBasePositionAndOrientation(objectID, (x, y, z), (orient_x,orient_y,orient_z,orient_w))
+            p.resetBaseVelocity(objectID,(0.,0.,0.), (0.,0.,0.))
+            mobile_object_count+=1
+
+
 def save_scene(scene_file, binID, mobile_object_IDs, mobile_object_types, held_fixed_list):
     bin_pose, bin_orientation = p.getBasePositionAndOrientation(binID)
     bin_mass = p.getDynamicsInfo(binID,-1)[0]

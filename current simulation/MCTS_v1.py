@@ -21,6 +21,10 @@ dt = 1./240.
 
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 0, -75)
 
+mobile_object_IDs = []
+mobile_object_types = []
+held_fixed_list = []
+
 push_distance = 0.1
 reward_discount = 0.9
 
@@ -102,11 +106,9 @@ class node:
 
     def set_up_root_node(self):
         # open scene in root node
-        self.mobile_object_IDs = []
-        self.mobile_object_types = []
-        self.held_fixed_list = []
         scene_path = os.path.join(self.node_dir, "scene.csv")
-        p_utils.open_saved_scene(scene_path, self.node_dir, [], [], self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
+        global binID
+        binID = p_utils.open_saved_scene(scene_path, self.node_dir, [], [], mobile_object_IDs, mobile_object_types, held_fixed_list)
 
         #get the COMs of the objects, which are needed for precomputed pushing points
         object_coms = []
@@ -115,8 +117,8 @@ class node:
             object_coms.append(np.array([row[1],row[2],row[3]]))
 
         #set up precomputed pushing points for all objects in the scene
-        for i in np.arange(len(self.mobile_object_IDs)):
-            object_type = self.mobile_object_types[i]
+        for i in np.arange(len(mobile_object_IDs)):
+            object_type = mobile_object_types[i]
             object_com = object_coms[i]
             if precomputed_pushing_points_and_point_pairs.get(object_type) is None:
                 precomputed_pushing_points_and_point_pairs[object_type] = precompute_pushing_points_and_point_pairs(object_type, object_com)
@@ -127,7 +129,6 @@ class node:
         image_num+=1'''
 
         self.officially_unexplored_actions = self.generate_action_list()
-        p.resetSimulation()
 
 
     def apply_action(self):
@@ -137,12 +138,9 @@ class node:
 
         reward = 0.
 
-        self.mobile_object_IDs = []
-        self.mobile_object_types = []
-        self.held_fixed_list = []
 
         #open scene before
-        binID = p_utils.open_saved_scene(os.path.join(self.parent.node_dir, "scene.csv"), self.node_dir, [], [], self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
+        p_utils.open_saved_scene_existing_objects(os.path.join(self.parent.node_dir, "scene.csv"), mobile_object_IDs)
 
         self.action_type, self.point_1, self.point_2 = self.action_to_get_here
         #action_type is either "push" or "grasp"
@@ -185,10 +183,11 @@ class node:
         p.removeBody(cylinderID)
 
         #save scene after
-        p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, self.mobile_object_IDs, self.mobile_object_types, self.held_fixed_list)
+        global binID
+        p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
         #TODO: delete this separated block of code
-        target_pos, _ = p.getBasePositionAndOrientation(self.mobile_object_IDs[0])
+        target_pos, _ = p.getBasePositionAndOrientation(mobile_object_IDs[0])
         if np.linalg.norm(np.array(target_pos) - np.array([-0.1, 0., target_pos[2]])) < 0.03:
             reward+=100.
         '''global image_num
@@ -200,7 +199,6 @@ class node:
                 self.officially_unexplored_actions = self.generate_action_list()
             else:
                 print("push failed")
-        p.resetSimulation()
 
         self.node_reward = reward
 
@@ -214,17 +212,17 @@ class node:
 
 
     def generate_action_list(self):
-        global image_num
+        #global image_num
         if self.depth == maximum_depth:
-            image_num+=9 #TODO delete this when taking these images is no longer necessary
+            #image_num+=9 #TODO delete this when taking these images is no longer necessary
             return []
 
         candidate_list = []
 
-        for i in np.arange(len(self.mobile_object_IDs)):
-            id = self.mobile_object_IDs[i]
+        for i in np.arange(len(mobile_object_IDs)):
+            id = mobile_object_IDs[i]
             position, orientation = p.getBasePositionAndOrientation(id)
-            object_type = self.mobile_object_types[i]
+            object_type = mobile_object_types[i]
 
             points, edges = precomputed_pushing_points_and_point_pairs[object_type]
             transformed_points = np.zeros_like(points)
@@ -271,8 +269,9 @@ class node:
             if add_point:
                 filtered_candidate_list.append(("push", candidate_list[i][0], candidate_list[i][1]))
                 list_to_export.append(candidate_list[i][0])
-            else:
-                p.removeBody(point_id)
+        #delete all pushing point spheres
+        for point_id in point_collision_IDs:
+            p.removeBody(point_id)
 
         #TODO add a function to check if two accepted points who are in the same edge can be a grasp action.
         # Criteria are that both points are within a maximum distance, and both points are not too close to the center of particularly large faces.
@@ -341,6 +340,7 @@ Step 3ba is run serially, to avoid collisions/race conditions in numbering the n
 Step 3bb is run in parallel, picking up on the same processes used for 3a.
 3c is run serially, to avoid race conditions in updating rewards and number of times visited up the chain.
 '''
+start_time = time.perf_counter_ns()
 
 root_node = node(None)
 #load a scene to the node
@@ -350,6 +350,8 @@ root_node.set_up_root_node()
 official_child_expansion_count = 0
 total_expansion_count = 0
 official_child_redo_count = 0
+
+
 while True:
     node_to_expand = root_node.select_node_to_expand(explore_factor)
     if len(node_to_expand.children)==0 and len(node_to_expand.officially_unexplored_actions)==0:
@@ -387,14 +389,10 @@ for child in root_node.children:
 print("action to take in root node:",action_to_take)
 print("sum of rewards:",best_sum_of_rewards)
 
-
-
-
-'''For timing purposes. Copy where needed, perhaps to a single round of apply_action and generate_action_list:
-
-start_time = time.perf_counter_ns()
-print('Answer:', pbe.fibinacci_cpp(n))
-print('Time:', (time.perf_counter_ns() - start_time) / 1e9, 's')
-'''
-
 p.disconnect()
+
+print('Time to run:', (time.perf_counter_ns() - start_time) / 1e9, 's')
+
+#For timing purposes. Copy where needed, perhaps to a single round of apply_action and generate_action_list:
+#start_time = time.perf_counter_ns()
+#print('Time to open scene:', (time.perf_counter_ns() - start_time) / 1e9, 's')
