@@ -43,13 +43,13 @@ def set_up_camera(pos, distance=0.75, yaw=45, pitch=-35):
     return view_matrix, proj_matrix
 
 
-def print_image(view_matrix, proj_matrix, imgs_dir, image_num):
+def print_image(view_matrix, proj_matrix, imgs_dir, image_num, extra_message=""):
     image_result = p.getCameraImage(640, 480, view_matrix, proj_matrix, renderer=p.ER_TINY_RENDERER, shadow=1)
     w, h, pixels = image_result[:3]
     img_numpy = np.array(pixels).reshape((h, w, 4))
 
     img = Image.fromarray(img_numpy, "RGBA")
-    image_filename = os.path.join(imgs_dir, str(image_num).zfill(4) + ".png")
+    image_filename = os.path.join(imgs_dir, str(image_num).zfill(4) + extra_message + ".png")
     img.save(image_filename)
 
 

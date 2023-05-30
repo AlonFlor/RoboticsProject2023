@@ -39,7 +39,7 @@ image_num = 0
 
 def precompute_pushing_points_and_point_pairs(object_type, object_com):
     #Points should be an np array, edges should be a list of indices.
-    #TODO: replace this with more systematic code
+    #TODO: replace this with more general code, rather than just what works for what I handcrafted for the cracker box
     precomputed_points_file = os.path.join("object models",object_type,"precomputed_pushing_points.csv")
     precomputed_pushing_points = np.array(file_handling.read_csv_file(precomputed_points_file, [float, float, float]))
     precomputed_pushing_points -= object_com
@@ -104,7 +104,7 @@ class node:
         return -1
 
 
-    def set_up_root_node(self):
+    def set_up_root_node(self, generate_images=False):
         # open scene in root node
         scene_path = os.path.join(self.node_dir, "scene.csv")
         global binID
@@ -123,15 +123,17 @@ class node:
             if precomputed_pushing_points_and_point_pairs.get(object_type) is None:
                 precomputed_pushing_points_and_point_pairs[object_type] = precompute_pushing_points_and_point_pairs(object_type, object_com)
 
-        '''#TODO: delete this separated block of code
+        if generate_images:
+            global image_num
+            p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
+            image_num+=1
+
+        self.officially_unexplored_actions = self.generate_action_list(generate_images)
+
+
+    def apply_action(self, generate_images=False):
         global image_num
-        p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
-        image_num+=1'''
 
-        self.officially_unexplored_actions = self.generate_action_list()
-
-
-    def apply_action(self):
         #do not repeat actions
         if self.node_reward is not None:
             return
@@ -150,8 +152,8 @@ class node:
         unsuccessful_push = False
 
         #create cylinder
-        cylinder_radius = 0.01
-        cylinder_height = 0.1
+        cylinder_radius = pushing_point_free_space_radius
+        cylinder_height = 0.05
         cylinder_shapeID = p.createCollisionShape(p.GEOM_CYLINDER, radius=cylinder_radius, height=cylinder_height)
         cylinder_visual_shapeID = p.createVisualShape(p.GEOM_CYLINDER, radius=cylinder_radius, length=cylinder_height)
         cylinderID = p.createMultiBody(1., cylinder_shapeID, cylinder_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
@@ -186,19 +188,22 @@ class node:
         global binID
         p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
-        #TODO: delete this separated block of code
+        #TODO: delete this reward function, it will be replaced with one for grasps
         target_pos, _ = p.getBasePositionAndOrientation(mobile_object_IDs[0])
         if np.linalg.norm(np.array(target_pos) - np.array([-0.1, 0., target_pos[2]])) < 0.03:
             reward+=100.
-        '''global image_num
-        p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
-        image_num+=1'''
+
+        if generate_images:
+            p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
 
         if self.action_type == "push":
             if not unsuccessful_push:
-                self.officially_unexplored_actions = self.generate_action_list()
+                self.officially_unexplored_actions = self.generate_action_list(generate_images)
             else:
                 print("push failed")
+
+        if generate_images:
+            image_num+=1
 
         self.node_reward = reward
 
@@ -211,10 +216,9 @@ class node:
             self.parent.back_propagate(reward_discount * reward)
 
 
-    def generate_action_list(self):
-        #global image_num
+    def generate_action_list(self, generate_images=False):
+        global image_num
         if self.depth == maximum_depth:
-            #image_num+=9 #TODO delete this when taking these images is no longer necessary
             return []
 
         candidate_list = []
@@ -247,11 +251,6 @@ class node:
             point_collision_IDs.append(point_id)
         p.performCollisionDetection()
 
-        '''#global image_num
-        #TODO delete this when taking these images is no longer necessary
-        p_utils.print_image(view_matrix, proj_matrix, test_dir, image_num)
-        image_num+=1'''
-
         #filter the pushing points. If any pushing point's sphere overlaps with an object, that point is out. Pushing points may overlap with each other.
         #TODO: check that this works. Pushing points fully enclosed by objects should have contact with them. contact[2] should give the id of the second body.
         filtered_candidate_list = []
@@ -277,10 +276,17 @@ class node:
         # Criteria are that both points are within a maximum distance, and both points are not too close to the center of particularly large faces.
         # The second criterion might be pre-computed, in which case the edge would be pre-marked as "cannot be used for a grasp" (the actual designation would be shorter).
 
-        '''#global image_num
-        #TODO delete this when taking these images is no longer necessary
-        p_utils.print_image(view_matrix, proj_matrix, test_dir, image_num)
-        image_num+=8'''
+        if generate_images:
+            #recreate spheres to show valid pushing points
+            point_collision_IDs = []
+            for i, type_and_point_pair in enumerate(filtered_candidate_list):
+                _, point, _ = type_and_point_pair
+                point_id = p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=point)
+                point_collision_IDs.append(point_id)
+            p_utils.print_image(view_matrix, proj_matrix, test_dir, image_num, "_pushing_points")
+            #remove spheres again
+            for point_id in point_collision_IDs:
+                p.removeBody(point_id)
 
         pushing_points_ply_path_str = os.path.join(self.node_dir, "pushing_points.ply")
         list_to_export = np.array(list_to_export)
@@ -341,11 +347,12 @@ Step 3bb is run in parallel, picking up on the same processes used for 3a.
 3c is run serially, to avoid race conditions in updating rewards and number of times visited up the chain.
 '''
 start_time = time.perf_counter_ns()
+generate_images = False
 
 root_node = node(None)
 #load a scene to the node
 file_handling.copy_file(os.path.join("scenes",f"scene_{9}_shifted_COM.csv"), os.path.join(root_node.node_dir, "scene.csv"))
-root_node.set_up_root_node()
+root_node.set_up_root_node(generate_images)
 
 official_child_expansion_count = 0
 total_expansion_count = 0
@@ -364,7 +371,7 @@ while True:
     print("child:",n.nodeNum)
     if n.nodeNum < total_expansion_count:
         official_child_redo_count+=1
-    n.apply_action()
+    n.apply_action(generate_images)
     current_node = n
     while len(current_node.officially_unexplored_actions) != 0:
         total_expansion_count += 1
@@ -372,7 +379,7 @@ while True:
         unrecognized_child_index = current_node.create_or_open_unrecognized_child()
         current_node = current_node.unrecognized_children[unrecognized_child_index][1]
         print("unrecognized child:", current_node.nodeNum)
-        current_node.apply_action()
+        current_node.apply_action(generate_images)
     n.back_propagate(current_node.node_reward)
 
 print(f"expanded {official_child_expansion_count} recognized children")
