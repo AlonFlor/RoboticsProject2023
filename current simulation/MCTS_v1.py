@@ -33,17 +33,23 @@ precomputed_pushing_points_and_point_pairs = {}
 pushing_point_free_space_radius = 0.015 / 2
 explore_factor = 1.#0.5
 
-maximum_depth = 3#5
+maximum_depth = 2#3#5
 
 image_num = 0
 
 def precompute_pushing_points_and_point_pairs(object_type, object_com):
-    #Points should be an np array, edges should be a list of indices.
-    #TODO: replace this with more general code, rather than just what works for what I handcrafted for the cracker box
+    #Points are an np array, edges are a list of tuples, where each tuple contains the indices of a pair pushing points and a bool (in int form) indicating if the pair is graspable.
     precomputed_points_file = os.path.join("object models",object_type,"precomputed_pushing_points.csv")
-    precomputed_pushing_points = np.array(file_handling.read_csv_file(precomputed_points_file, [float, float, float]))
+    precomputed_pushing_point_pairs = file_handling.read_csv_file(precomputed_points_file, [float, float, float, float, float, float, int])
+    precomputed_pushing_points = []
+    edges = []
+    for i in np.arange(len(precomputed_pushing_point_pairs)):
+        precomputed_pushing_points.append(precomputed_pushing_point_pairs[i][:3])
+        precomputed_pushing_points.append(precomputed_pushing_point_pairs[i][3:6])
+        current_index = len(precomputed_pushing_points) -1
+        edges.append((current_index, current_index-1, precomputed_pushing_point_pairs[i][6]))
+    precomputed_pushing_points = np.array(precomputed_pushing_points)
     precomputed_pushing_points -= object_com
-    edges = [(0,1),(2,3),(4,5)]
     return precomputed_pushing_points,edges
 
 
@@ -105,6 +111,8 @@ class node:
 
 
     def set_up_root_node(self, generate_images=False):
+        global image_num
+
         # open scene in root node
         scene_path = os.path.join(self.node_dir, "scene.csv")
         global binID
@@ -124,11 +132,12 @@ class node:
                 precomputed_pushing_points_and_point_pairs[object_type] = precompute_pushing_points_and_point_pairs(object_type, object_com)
 
         if generate_images:
-            global image_num
             p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
-            image_num+=1
 
         self.officially_unexplored_actions = self.generate_action_list(generate_images)
+
+        if generate_images:
+            image_num+=1
 
 
     def apply_action(self, generate_images=False):
@@ -152,17 +161,13 @@ class node:
         unsuccessful_push = False
 
         #create cylinder
-        cylinder_radius = pushing_point_free_space_radius
-        cylinder_height = 0.05
-        cylinder_shapeID = p.createCollisionShape(p.GEOM_CYLINDER, radius=cylinder_radius, height=cylinder_height)
-        cylinder_visual_shapeID = p.createVisualShape(p.GEOM_CYLINDER, radius=cylinder_radius, length=cylinder_height)
-        cylinderID = p.createMultiBody(1., cylinder_shapeID, cylinder_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
+        cylinderID = p_utils.create_cylinder(pushing_point_free_space_radius, 0.05)
 
         p.resetBasePositionAndOrientation(cylinderID, self.point_1, (0., 0., 0., 1.))
 
         if self.action_type == "grasp":
             #TODO replace this with actual robot grasp?
-            reward = 100. #congratulations on being able to grasp!
+            pass
         else:
             #push
             #TODO replace this with actual robot push?
@@ -172,11 +177,11 @@ class node:
             cylinder_original_point, _ = p.getBasePositionAndOrientation(cylinderID)
             p_utils.push(pusher_end, cylinderID, dt, time_out=2.)
             cylinder_new_point, _ = p.getBasePositionAndOrientation(cylinderID)
+            p_utils.let_time_pass(0.2, cylinderID, dt)
 
             #see if the push was successful or not, by seeing if the pusher moved even a tenth of the requested amount.
             actual_push_distance = np.linalg.norm(np.array(cylinder_new_point) - np.array(cylinder_original_point))
             if actual_push_distance < 0.1*push_distance:
-                reward = -10
                 unsuccessful_push = True
                 # since actual_push_distance < 0.1*push_distance, the push failed, so this node should not have been opened/existed.
                 # Since this node should not have existed, it should at least be a dead end with no further actions to be taken.
@@ -188,10 +193,14 @@ class node:
         global binID
         p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
-        #TODO: delete this reward function, it will be replaced with one for grasps
-        target_pos, _ = p.getBasePositionAndOrientation(mobile_object_IDs[0])
-        if np.linalg.norm(np.array(target_pos) - np.array([-0.1, 0., target_pos[2]])) < 0.03:
-            reward+=100.
+        #reward function
+        #TODO make a more formal version of this, or at least allow the target object ID to be defined elsewhere
+        if self.action_type=="grasp":
+            grasp_ray = p.rayTest(self.point_1, self.point_2)
+            if len(grasp_ray) > 0:
+                grasped_object_id = grasp_ray[0][0]
+                if grasped_object_id == mobile_object_IDs[1]:
+                    reward+=100.
 
         if generate_images:
             p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
@@ -233,64 +242,54 @@ class node:
             for point_index in np.arange(points.shape[0]):
                 transformed_points[point_index] = p_utils.rotate_vector(points[point_index], orientation) + position
                 #precomputed pushing points are already transformed by COM when loaded, so only transforming them here by object position and orientation
-            for point1_index, point2_index in edges:
+            for point1_index, point2_index, graspable in edges:
                 # every single pushing point has a partner in an edge. Therefore, pushing points and their directions are calculated by edge.
                 point_1 = transformed_points[point1_index]
                 point_2 = transformed_points[point2_index]
-                if point_1[2]>pushing_point_free_space_radius:
-                    candidate_list.append((point_1, point_2))
-                if point_2[2]>pushing_point_free_space_radius:
-                    candidate_list.append((point_2, point_1))
+                candidate_list.append((point_1, point_2,graspable))
+                candidate_list.append((point_2, point_1,graspable))
 
-        #add the pushing points as shapes for collision checking. Invalid pushing points are filtered out.
-        point_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=pushing_point_free_space_radius)
-        point_collision_IDs = []
-        for i,point_pair in enumerate(candidate_list):
-            point, _ = point_pair #the first point of each pair is the point where the pusher will start, and therefore it is the point to check for collisions with objects.
-            point_id = p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=point)
-            point_collision_IDs.append(point_id)
-        p.performCollisionDetection()
 
-        #filter the pushing points. If any pushing point's sphere overlaps with an object, that point is out. Pushing points may overlap with each other.
-        #TODO: check that this works. Pushing points fully enclosed by objects should have contact with them. contact[2] should give the id of the second body.
+        #create a test pusher cylinder for collision checking. The cylinder is placed at each candidate pushing point to test if it is valid. Invalid pushing points are filtered out.
+        cylinderID = p_utils.create_cylinder(pushing_point_free_space_radius, 0.05)
+
+        # filter the pushing points. If the cylinder, when placed at a pushing point, overlaps with an object, that point is out.
+        # If both pushing points in a pair get added in, then good.
         filtered_candidate_list = []
-        list_to_export = []
-        for i,point_id in enumerate(point_collision_IDs):
-            contact_results = p.getContactPoints(point_id)
-            if len(contact_results)==0:
-                add_point=True
-            else:
-                add_point = True
-                for contact in contact_results:
-                    if contact[2] not in point_collision_IDs:
-                        add_point = False
-                        break
-            if add_point:
+        added_even=False
+        for i,point_pair in enumerate(candidate_list):
+            point, _, graspable = point_pair #the first point of each pair is the point where the pusher will start, and therefore it is the point to check for collisions with objects.
+            p.resetBasePositionAndOrientation(cylinderID, point, (0., 0., 0., 1.))
+            p.performCollisionDetection()
+            contact_results = p.getContactPoints(cylinderID)
+            if len(contact_results) == 0:
                 filtered_candidate_list.append(("push", candidate_list[i][0], candidate_list[i][1]))
-                list_to_export.append(candidate_list[i][0])
-        #delete all pushing point spheres
-        for point_id in point_collision_IDs:
-            p.removeBody(point_id)
+                if i%2==0 and graspable:
+                    added_even=True
+                elif added_even and graspable:
+                    filtered_candidate_list.append(("grasp", candidate_list[i][0], candidate_list[i][1]))
+                    added_even=False
+                else:
+                    added_even=False
+            else:
+                added_even=False
 
-        #TODO add a function to check if two accepted points who are in the same edge can be a grasp action.
-        # Criteria are that both points are within a maximum distance, and both points are not too close to the center of particularly large faces.
-        # The second criterion might be pre-computed, in which case the edge would be pre-marked as "cannot be used for a grasp" (the actual designation would be shorter).
+        p.removeBody(cylinderID)
+
 
         if generate_images:
-            #recreate spheres to show valid pushing points
+            #create spheres to show valid pushing points
+            point_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=pushing_point_free_space_radius)
             point_collision_IDs = []
-            for i, type_and_point_pair in enumerate(filtered_candidate_list):
+            for type_and_point_pair in filtered_candidate_list:
                 _, point, _ = type_and_point_pair
                 point_id = p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=point)
                 point_collision_IDs.append(point_id)
             p_utils.print_image(view_matrix, proj_matrix, test_dir, image_num, "_pushing_points")
-            #remove spheres again
+            #remove spheres
             for point_id in point_collision_IDs:
                 p.removeBody(point_id)
 
-        pushing_points_ply_path_str = os.path.join(self.node_dir, "pushing_points.ply")
-        list_to_export = np.array(list_to_export)
-        np.savetxt(pushing_points_ply_path_str, list_to_export, fmt='%f', header=p_utils.PLY_header_str(len(list_to_export)), comments='', encoding='utf-8')
 
         return filtered_candidate_list
 
@@ -368,19 +367,21 @@ while True:
 
     node_to_expand.create_child()
     n = node_to_expand.children[-1]
-    print("child:",n.nodeNum)
     if n.nodeNum < total_expansion_count:
         official_child_redo_count+=1
     n.apply_action(generate_images)
+    print("child:",n.nodeNum,f'\t\t{len(n.officially_unexplored_actions)} actions')
     current_node = n
     while len(current_node.officially_unexplored_actions) != 0:
         total_expansion_count += 1
 
         unrecognized_child_index = current_node.create_or_open_unrecognized_child()
         current_node = current_node.unrecognized_children[unrecognized_child_index][1]
-        print("unrecognized child:", current_node.nodeNum)
         current_node.apply_action(generate_images)
+        print("unrecognized child:", current_node.nodeNum,f'\t\t{len(current_node.officially_unexplored_actions)} actions')
     n.back_propagate(current_node.node_reward)
+
+    print('\t\t\tTime to run so far:', (time.perf_counter_ns() - start_time) / 1e9, 's')
 
 print(f"expanded {official_child_expansion_count} recognized children")
 print(f"expanded {total_expansion_count} nodes in total")
