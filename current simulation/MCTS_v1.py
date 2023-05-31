@@ -7,12 +7,13 @@ import pybullet_utilities as p_utils
 import file_handling
 import os
 
-push_distance = 0.1
+push_distance = 0.15
 reward_discount = 0.9
 
-explore_factor = 1.#0.5
+explore_factor = 0.5
 maximum_depth = 2#3#5
 pushing_point_free_space_radius = 0.015 / 2
+cylinder_height_offset = np.array([0.,0.,0.02])
 
 image_num = 0
 
@@ -96,7 +97,7 @@ class node:
 
         # open scene in root node
         scene_path = os.path.join(self.node_dir, "scene.csv")
-        binID = p_utils.open_saved_scene(scene_path, self.node_dir, [], [], mobile_object_IDs, mobile_object_types, held_fixed_list)
+        binID = p_utils.open_saved_scene(scene_path, self.node_dir, None, None, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
         #get the COMs of the objects, which are needed for precomputed pushing points
         object_coms = []
@@ -145,7 +146,7 @@ class node:
 
         #create cylinder
         cylinderID = p_utils.create_cylinder(pushing_point_free_space_radius, 0.05)
-        p.resetBasePositionAndOrientation(cylinderID, self.point_1, (0., 0., 0., 1.))
+        p.resetBasePositionAndOrientation(cylinderID, self.point_1+cylinder_height_offset, (0., 0., 0., 1.))
 
         if self.action_type == "grasp":
             #TODO replace this with actual robot grasp?
@@ -155,11 +156,11 @@ class node:
             #TODO replace this with actual robot push?
             push_vector = self.point_2 - self.point_1
             push_vector = push_distance * push_vector / np.linalg.norm(push_vector)
-            pusher_end = self.point_1 + push_vector
+            pusher_end = self.point_1 + push_vector + cylinder_height_offset
             cylinder_original_point, _ = p.getBasePositionAndOrientation(cylinderID)
             p_utils.push(pusher_end, cylinderID, dt, time_out=2.)
             cylinder_new_point, _ = p.getBasePositionAndOrientation(cylinderID)
-            p_utils.let_time_pass(0.2, cylinderID, dt)
+            p_utils.let_time_pass(cylinderID, dt,mobile_object_IDs)
 
             #see if the push was successful or not, by seeing if the pusher moved even a tenth of the requested amount.
             actual_push_distance = np.linalg.norm(np.array(cylinder_new_point) - np.array(cylinder_original_point))

@@ -77,7 +77,7 @@ p.resetBasePositionAndOrientation(objectID, (-0.15,-0.05,0.05), (0.,0.,0.,1.))
 
 #create pusher
 pusher_radius = 0.01
-pusher_height = 0.1
+pusher_height = 0.05
 pusher_shapeID = p.createCollisionShape(p.GEOM_CYLINDER, radius=pusher_radius, height=pusher_height)
 pusher_visual_shapeID = p.createVisualShape(p.GEOM_CYLINDER, radius=pusher_radius, length=pusher_height)
 pusherID = p.createMultiBody(1., pusher_shapeID, pusher_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
@@ -93,7 +93,7 @@ fps = 24.
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 45, -65)
 
 #pusher_start_pos = (0.,-0.25,0.02)
-pusher_start_pos = (0.25,0.,0.02)
+pusher_start_pos = (0.25,0.,0.05)
 
 image_num = 0
 
@@ -101,7 +101,7 @@ p.resetBasePositionAndOrientation(pusherID, pusher_start_pos, (0., 0., 0., 1.))
 #pusher_end = np.array([pusher_start_pos[0], pusher_start_pos[1]+0.4, pusher_start_pos[2]])
 pusher_end = np.array([pusher_start_pos[0]-0.35, pusher_start_pos[1], pusher_start_pos[2]])
 image_num = p_utils.push(pusher_end, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
-
+image_num = p_utils.let_time_pass(pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
 
 
 p.disconnect()

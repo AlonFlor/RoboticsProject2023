@@ -33,7 +33,7 @@ def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, im
     mobile_object_IDs = []
     mobile_object_types = []
     held_fixed_list = []
-    binID = p_utils.open_saved_scene(scene_file, action_test_dir, [], [], mobile_object_IDs, mobile_object_types, held_fixed_list)
+    binID = p_utils.open_saved_scene(scene_file, action_test_dir, None, None, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
     action_type, point_1, point_2 = action_to_get_here
 
@@ -42,15 +42,14 @@ def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, im
     else:
         # create cylinder
         cylinderID = p_utils.create_cylinder(MCTS_v1.pushing_point_free_space_radius, 0.05)
-        p.resetBasePositionAndOrientation(cylinderID, point_1, (0., 0., 0., 1.))
+        p.resetBasePositionAndOrientation(cylinderID, point_1+MCTS_v1.cylinder_height_offset, (0., 0., 0., 1.))
 
         #push
         push_vector = point_2 - point_1
         push_vector = MCTS_v1.push_distance * push_vector / np.linalg.norm(push_vector)
-        pusher_end = point_1 + push_vector
-        cylinder_original_point, _ = p.getBasePositionAndOrientation(cylinderID)
-        available_image_num = p_utils.push(pusher_end, cylinderID, dt, mobile_object_IDs, 24, view_matrix, proj_matrix, imgs_dir, available_image_num, [], time_out=2.)
-        available_image_num = p_utils.let_time_pass(0.2, cylinderID, dt, mobile_object_IDs, 24, view_matrix, proj_matrix, imgs_dir, available_image_num, [])
+        pusher_end = point_1 + push_vector + MCTS_v1.cylinder_height_offset
+        available_image_num = p_utils.push(pusher_end, cylinderID, dt, mobile_object_IDs, 24, view_matrix, proj_matrix, imgs_dir, available_image_num, None, time_out=2.)
+        available_image_num = p_utils.let_time_pass(cylinderID, dt, mobile_object_IDs, 24, view_matrix, proj_matrix, imgs_dir, available_image_num, None)
         p.removeBody(cylinderID)
 
         p_utils.save_scene(os.path.join(action_test_dir, "scene.csv"), binID, mobile_object_IDs, mobile_object_types,held_fixed_list)
@@ -58,17 +57,44 @@ def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, im
 
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 0, -75)
 
-#get the scene
+
+previous_scene_file = os.path.join("scenes",f"scene_{9}.csv")#_shifted_COM
 scenario_loop_index = 0
-original_scene_file = os.path.join("scenes",f"scene_{9}_shifted_COM.csv")
-scene_file = os.path.join(test_dir,f"scene_{scenario_loop_index}.csv")
+while True:
+    #get the scene
+    scene_file = os.path.join(test_dir,f"scene_{scenario_loop_index}.csv")
+    file_handling.copy_file(previous_scene_file, scene_file)
 
-#apply MCTS
-file_handling.copy_file(original_scene_file, scene_file)
-MCTS_dir = os.path.join(test_dir,f"MCTS {scenario_loop_index}")
-os.mkdir(MCTS_dir)
-next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file)#, view_matrix, proj_matrix)
+    #apply MCTS
+    MCTS_dir = os.path.join(test_dir,f"MCTS_{scenario_loop_index}")
+    os.mkdir(MCTS_dir)
+    next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file)#, view_matrix, proj_matrix)
+    p.resetSimulation()
+    p.setGravity(0, 0, -9.8)
 
-#apply the action found by MCTS
-action_dir = os.path.join(test_dir,f"action {scenario_loop_index}")
-scenario_image_num = apply_action_in_scenario(scene_file, action_dir, next_action, image_folder, scenario_image_num)
+    #apply the action found by MCTS
+    print("applying action",scenario_loop_index)
+    action_dir = os.path.join(test_dir,f"action_{scenario_loop_index}")
+    os.mkdir(action_dir)
+    if next_action[0]=="grasp":
+        mobile_object_IDs = []
+        mobile_object_types = []
+        held_fixed_list = []
+        binID = p_utils.open_saved_scene(scene_file, action_dir, None, None, mobile_object_IDs, mobile_object_types, held_fixed_list)
+        point_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=MCTS_v1.pushing_point_free_space_radius)
+        p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[1])
+        p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[2])
+        p_utils.print_image(view_matrix,proj_matrix,test_dir,0,"_final result")
+        scenario_loop_index += 1
+        break
+    scenario_image_num = apply_action_in_scenario(scene_file, action_dir, next_action, image_folder, scenario_image_num)
+    p.resetSimulation()
+    p.setGravity(0, 0, -9.8)
+
+    #save the location of the scene for the next iteration of the loop.
+    previous_scene_file = os.path.join(action_dir,"scene.csv")
+
+    scenario_loop_index += 1
+
+p_utils.make_video(test_dir,image_folder)
+print(f"Took {scenario_loop_index} attempts")

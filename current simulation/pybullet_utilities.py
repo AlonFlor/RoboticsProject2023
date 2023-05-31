@@ -113,10 +113,11 @@ def create_cylinder(radius, height):
     return p.createMultiBody(1., cylinder_shapeID, cylinder_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
 
 
-def save_data_one_frame(time_val, fps, mobile_object_IDs, motion_script, image_num, view_matrix, proj_matrix, imgs_dir):
+def save_data_one_frame(time_val, fps, mobile_object_IDs, image_num, view_matrix, proj_matrix, imgs_dir, motion_script=None):
     if (time_val * fps - int(time_val * fps) < 0.0001):
-        for ID in mobile_object_IDs:
-            add_to_motion_script(ID, time_val, motion_script)
+        if motion_script is not None:
+            for ID in mobile_object_IDs:
+                add_to_motion_script(ID, time_val, motion_script)
 
         print_image(view_matrix, proj_matrix, imgs_dir, image_num)
         image_num += 1
@@ -134,7 +135,7 @@ def push(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix
     while np.linalg.norm(np.array(pusher_position) - pusher_end) > 0.01:
         time_val = count * dt
         if saving_data:
-            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, motion_script, image_num, view_matrix, proj_matrix, imgs_dir)
+            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, image_num, view_matrix, proj_matrix, imgs_dir, motion_script)
 
         if time_val > time_out:
             break #pusher timed out
@@ -150,7 +151,6 @@ def push(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix
         pusher_speed = .1
         new_pusher_velocity = pusher_speed * pusher_displacement_from_destination / pusher_dist_from_destination
         p.resetBaseVelocity(pusherID, (new_pusher_velocity[0], new_pusher_velocity[1], new_pusher_velocity[2]), (0., 0., 0.))
-        p.applyExternalForce(pusherID, -1, (0., 0., 9.8), (0., 0., 0.), p.LINK_FRAME)  # antigravity
 
         count += 1
 
@@ -158,26 +158,33 @@ def push(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix
 
 
 
-def let_time_pass(time_amount, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None):
+def let_time_pass(pusherID, dt, mobile_object_IDs, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None):
     #for pusher
     count=0
     image_num = None
     if available_image_num != None:
         image_num = available_image_num + 0
-    saving_data = not (mobile_object_IDs==None)
+    saving_data = not (fps==None)
 
-    while time_amount>0:
+    velocities_sum = 0.
+    for id in mobile_object_IDs:
+        vel,ang_vel = p.getBaseVelocity(id)
+        velocities_sum += vel[0]+vel[1]+vel[2]+ang_vel[0]+ang_vel[1]+ang_vel[2]
+
+    while velocities_sum>0.001:
         time_val = count * dt
         if saving_data:
-            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, motion_script, image_num, view_matrix, proj_matrix, imgs_dir)
+            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, image_num, view_matrix, proj_matrix, imgs_dir, motion_script)
         count += 1
 
         p.stepSimulation()
 
         p.resetBaseVelocity(pusherID, (0., 0., 0.), (0., 0., 0.))
-        p.applyExternalForce(pusherID, -1, (0., 0., 9.8), (0., 0., 0.), p.LINK_FRAME)  # antigravity
 
-        time_amount -= dt
+        velocities_sum = 0.
+        for id in mobile_object_IDs:
+            vel, ang_vel = p.getBaseVelocity(id)
+            velocities_sum += vel[0] + vel[1] + vel[2] + ang_vel[0] + ang_vel[1] + ang_vel[2]
 
     return image_num
 
@@ -207,27 +214,30 @@ def open_saved_scene(scene_file, test_dir, shapes_list, motion_script, mobile_ob
 
     # load plane
     planeID, plane_shapes_entry = load_object("plane", test_dir, useFixedBase=True)
-    shapes_list.append(plane_shapes_entry)
-    motion_script.append([])
-    add_to_motion_script(planeID, 0., motion_script)
+    if motion_script is not None:
+        shapes_list.append(plane_shapes_entry)
+        motion_script.append([])
+        add_to_motion_script(planeID, 0., motion_script)
 
     binID = None
 
     for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
         if object_type=="bin":
-            motion_script.append([])
             bin_scale = (0.75, 0.75, 0.75)
             bin_collision_ID = p.createCollisionShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
             bin_visual_shapeID = p.createVisualShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
             bin_mass = 1.-held_fixed
             binID = p.createMultiBody(bin_mass, bin_collision_ID, bin_visual_shapeID, (x, y, z * bin_scale[2]), (orient_x,orient_y,orient_z,orient_w))
-            add_to_motion_script(binID, 0., motion_script)
-            shapes_list.append(["bin", [0.0, 0.0, 0.0]])
+            if motion_script is not None:
+                motion_script.append([])
+                add_to_motion_script(binID, 0., motion_script)
+                shapes_list.append(["bin", [0.0, 0.0, 0.0]])
         else:
             held_fixed_bool = bool(held_fixed)
             objectID, object_shapes_entry = load_object(object_type, test_dir, (com_x, com_y, com_z), useFixedBase=held_fixed_bool)
-            shapes_list.append(object_shapes_entry)
-            motion_script.append([])
+            if motion_script is not None:
+                shapes_list.append(object_shapes_entry)
+                motion_script.append([])
             mobile_object_IDs.append(objectID)
             mobile_object_types.append(object_type)
             held_fixed_list.append(held_fixed_bool)
@@ -280,6 +290,9 @@ def save_scene_with_shifted_COMs(original_scene_file, new_scene_file, new_COM_li
         new_scene_data.append([object_type,new_COM[0],new_COM[1],new_COM[2],x+rotated[0],y+rotated[1],z+rotated[2],orient_x,orient_y,orient_z,orient_w,held_fixed])
         object_count+=1
     file_handling.write_csv_file(new_scene_file, "object_type,COM_x,COM_y,COM_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", new_scene_data)
+
+#def reset_sim():
+#
 
 
 
