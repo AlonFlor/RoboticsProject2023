@@ -398,3 +398,12 @@ def get_points_from_ply_file(points_file_path):
     #note: the final row is not a point and should be discarded
     points = np.loadtxt(points_file_path,delimiter=" ",skiprows=header_size, usecols=range(9))
     return points
+
+
+'''rm = np.array(p.getMatrixFromQuaternion(p.getQuaternionFromEuler((0.,0.,28*np.pi/180)))).reshape((3,3))
+center = np.array([0.,0.018,0.015])
+def rotate_and_add(v):
+    return np.matmul(rm,v) + center
+v = [0.03,0,0.035,0.03,0,-0.035]
+print(rotate_and_add(np.array(v[:3])))
+print(rotate_and_add(np.array(v[3:6])))'''

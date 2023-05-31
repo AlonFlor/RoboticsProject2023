@@ -7,38 +7,18 @@ import pybullet_utilities as p_utils
 import file_handling
 import os
 
-# make directory for simulation files
-testNum = 1
-while os.path.exists("test" + str(testNum)):
-    testNum += 1
-test_dir = "test" + str(testNum)
-os.mkdir(test_dir)
-
-physicsClient = p.connect(p.DIRECT)
-#physicsClient = p.connect(p.GUI)
-p.setGravity(0, 0, -9.8)
-dt = 1./240.
-
-view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 0, -75)
-
-mobile_object_IDs = []
-mobile_object_types = []
-held_fixed_list = []
-
 push_distance = 0.1
 reward_discount = 0.9
 
-#pushing_points_per_object = 40.
-precomputed_pushing_points_and_point_pairs = {}
-pushing_point_free_space_radius = 0.015 / 2
 explore_factor = 1.#0.5
-
 maximum_depth = 2#3#5
+pushing_point_free_space_radius = 0.015 / 2
 
 image_num = 0
 
+
 def precompute_pushing_points_and_point_pairs(object_type, object_com):
-    #Points are an np array, edges are a list of tuples, where each tuple contains the indices of a pair pushing points and a bool (in int form) indicating if the pair is graspable.
+    #Points are a np array, edges are a list of tuples, where each tuple contains the indices of a pair pushing points and a bool (in int form) indicating if the pair is graspable.
     precomputed_points_file = os.path.join("object models",object_type,"precomputed_pushing_points.csv")
     precomputed_pushing_point_pairs = file_handling.read_csv_file(precomputed_points_file, [float, float, float, float, float, float, int])
     precomputed_pushing_points = []
@@ -54,7 +34,8 @@ def precompute_pushing_points_and_point_pairs(object_type, object_com):
 
 
 class node:
-    def __init__(self,parent, action=None):
+    def __init__(self,parent, test_dir, action=None):
+        self.test_dir = test_dir
         self.parent = parent
         self.action_to_get_here = action
         self.node_reward = None
@@ -93,7 +74,7 @@ class node:
                 return
             count +=1
         #If the child was not created in simulation, then create it.
-        self.children.append(node(self, action))
+        self.children.append(node(self, self.test_dir, action))
 
 
     def create_or_open_unrecognized_child(self):
@@ -106,16 +87,15 @@ class node:
             return i
 
         action = self.officially_unexplored_actions[index]
-        self.unrecognized_children.append([index, node(self, action)])
+        self.unrecognized_children.append([index, node(self, self.test_dir, action)])
         return -1
 
 
-    def set_up_root_node(self, generate_images=False):
+    def set_up_root_node(self, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, view_matrix=None, proj_matrix=None):
         global image_num
 
         # open scene in root node
         scene_path = os.path.join(self.node_dir, "scene.csv")
-        global binID
         binID = p_utils.open_saved_scene(scene_path, self.node_dir, [], [], mobile_object_IDs, mobile_object_types, held_fixed_list)
 
         #get the COMs of the objects, which are needed for precomputed pushing points
@@ -131,16 +111,19 @@ class node:
             if precomputed_pushing_points_and_point_pairs.get(object_type) is None:
                 precomputed_pushing_points_and_point_pairs[object_type] = precompute_pushing_points_and_point_pairs(object_type, object_com)
 
-        if generate_images:
-            p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
+        if view_matrix is not None:
+            p_utils.print_image(view_matrix,proj_matrix,self.test_dir,image_num)
 
-        self.officially_unexplored_actions = self.generate_action_list(generate_images)
+        self.officially_unexplored_actions =\
+            self.generate_action_list(mobile_object_IDs, mobile_object_types, precomputed_pushing_points_and_point_pairs, view_matrix, proj_matrix)
 
-        if generate_images:
+        if view_matrix is not None:
             image_num+=1
 
+        return binID
 
-    def apply_action(self, generate_images=False):
+
+    def apply_action(self, dt, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, binID, view_matrix=None, proj_matrix=None):
         global image_num
 
         #do not repeat actions
@@ -162,7 +145,6 @@ class node:
 
         #create cylinder
         cylinderID = p_utils.create_cylinder(pushing_point_free_space_radius, 0.05)
-
         p.resetBasePositionAndOrientation(cylinderID, self.point_1, (0., 0., 0., 1.))
 
         if self.action_type == "grasp":
@@ -190,7 +172,6 @@ class node:
         p.removeBody(cylinderID)
 
         #save scene after
-        global binID
         p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
         #reward function
@@ -202,16 +183,17 @@ class node:
                 if grasped_object_id == mobile_object_IDs[1]:
                     reward+=100.
 
-        if generate_images:
-            p_utils.print_image(view_matrix,proj_matrix,test_dir,image_num)
+        if view_matrix is not None:
+            p_utils.print_image(view_matrix,proj_matrix,self.test_dir,image_num)
 
         if self.action_type == "push":
             if not unsuccessful_push:
-                self.officially_unexplored_actions = self.generate_action_list(generate_images)
+                self.officially_unexplored_actions =\
+                    self.generate_action_list(mobile_object_IDs, mobile_object_types, precomputed_pushing_points_and_point_pairs, view_matrix, proj_matrix)
             else:
                 print("push failed")
 
-        if generate_images:
+        if view_matrix is not None:
             image_num+=1
 
         self.node_reward = reward
@@ -225,8 +207,9 @@ class node:
             self.parent.back_propagate(reward_discount * reward)
 
 
-    def generate_action_list(self, generate_images=False):
+    def generate_action_list(self, mobile_object_IDs, mobile_object_types, precomputed_pushing_points_and_point_pairs, view_matrix=None, proj_matrix=None):
         global image_num
+
         if self.depth == maximum_depth:
             return []
 
@@ -277,7 +260,7 @@ class node:
         p.removeBody(cylinderID)
 
 
-        if generate_images:
+        if view_matrix is not None:
             #create spheres to show valid pushing points
             point_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=pushing_point_free_space_radius)
             point_collision_IDs = []
@@ -285,7 +268,7 @@ class node:
                 _, point, _ = type_and_point_pair
                 point_id = p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=point)
                 point_collision_IDs.append(point_id)
-            p_utils.print_image(view_matrix, proj_matrix, test_dir, image_num, "_pushing_points")
+            p_utils.print_image(view_matrix, proj_matrix, self.test_dir, image_num, "_pushing_points")
             #remove spheres
             for point_id in point_collision_IDs:
                 p.removeBody(point_id)
@@ -345,61 +328,69 @@ Step 3ba is run serially, to avoid collisions/race conditions in numbering the n
 Step 3bb is run in parallel, picking up on the same processes used for 3a.
 3c is run serially, to avoid race conditions in updating rewards and number of times visited up the chain.
 '''
-start_time = time.perf_counter_ns()
-generate_images = False
+def MCTS(test_dir, dt, scene_file, view_matrix=None, proj_matrix=None):
+    start_time = time.perf_counter_ns()
 
-root_node = node(None)
-#load a scene to the node
-file_handling.copy_file(os.path.join("scenes",f"scene_{9}_shifted_COM.csv"), os.path.join(root_node.node_dir, "scene.csv"))
-root_node.set_up_root_node(generate_images)
+    mobile_object_IDs = []
+    mobile_object_types = []
+    held_fixed_list = []
+    precomputed_pushing_points_and_point_pairs = {}
 
-official_child_expansion_count = 0
-total_expansion_count = 0
-official_child_redo_count = 0
+    root_node = node(None, test_dir)
+
+    #load a scene to the node
+    file_handling.copy_file(scene_file, os.path.join(root_node.node_dir, "scene.csv"))
+    binID = root_node.set_up_root_node(mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, view_matrix, proj_matrix)
+
+    official_child_expansion_count = 0
+    total_expansion_count = 0
+    number_of_nodes = 1
 
 
-while True:
-    node_to_expand = root_node.select_node_to_expand(explore_factor)
-    if len(node_to_expand.children)==0 and len(node_to_expand.officially_unexplored_actions)==0:
-        break
-    official_child_expansion_count += 1
-    total_expansion_count += 1
-
-    node_to_expand.create_child()
-    n = node_to_expand.children[-1]
-    if n.nodeNum < total_expansion_count:
-        official_child_redo_count+=1
-    n.apply_action(generate_images)
-    print("child:",n.nodeNum,f'\t\t{len(n.officially_unexplored_actions)} actions')
-    current_node = n
-    while len(current_node.officially_unexplored_actions) != 0:
+    while True:
+        node_to_expand = root_node.select_node_to_expand(explore_factor)
+        if len(node_to_expand.children)==0 and len(node_to_expand.officially_unexplored_actions)==0:
+            break
+        official_child_expansion_count += 1
         total_expansion_count += 1
 
-        unrecognized_child_index = current_node.create_or_open_unrecognized_child()
-        current_node = current_node.unrecognized_children[unrecognized_child_index][1]
-        current_node.apply_action(generate_images)
-        print("unrecognized child:", current_node.nodeNum,f'\t\t{len(current_node.officially_unexplored_actions)} actions')
-    n.back_propagate(current_node.node_reward)
+        node_to_expand.create_child()
+        n = node_to_expand.children[-1]
+        number_of_nodes = n.nodeNum + 1
+        n.apply_action(dt, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, binID, view_matrix, proj_matrix)
+        print("child:",n.nodeNum,f'\t\t{len(n.officially_unexplored_actions)} actions')
+        current_node = n
+        while len(current_node.officially_unexplored_actions) != 0:
+            total_expansion_count += 1
 
-    print('\t\t\tTime to run so far:', (time.perf_counter_ns() - start_time) / 1e9, 's')
+            unrecognized_child_index = current_node.create_or_open_unrecognized_child()
+            current_node = current_node.unrecognized_children[unrecognized_child_index][1]
+            if current_node.nodeNum <= number_of_nodes:
+                number_of_nodes = current_node.nodeNum + 1
+            current_node.apply_action(dt, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, binID, view_matrix, proj_matrix)
+            print("unrecognized child:", current_node.nodeNum,f'\t\t{len(current_node.officially_unexplored_actions)} actions')
+        n.back_propagate(current_node.node_reward)
 
-print(f"expanded {official_child_expansion_count} recognized children")
-print(f"expanded {total_expansion_count} nodes in total")
-print("Note: for both of these numbers, repeats were not factored out")
-print("Estimate for nodes officially expanded more than once:",official_child_redo_count)
+        print('\t\t\tTime to run so far:', (time.perf_counter_ns() - start_time) / 1e9, 's')
 
-action_to_take = None
-best_sum_of_rewards = 0
-for child in root_node.children:
-    if child.sum_of_rewards > best_sum_of_rewards:
-        action_to_take = child.action_to_get_here
-        best_sum_of_rewards = child.sum_of_rewards
-print("action to take in root node:",action_to_take)
-print("sum of rewards:",best_sum_of_rewards)
+    print(f"expanded {official_child_expansion_count} recognized children")
+    print(f"expanded {total_expansion_count} nodes in total")
+    print("Note: for both of these numbers, repeats were not factored out")
+    print("Number of unique nodes expanded:",number_of_nodes)
 
-p.disconnect()
+    action_to_take = None
+    best_sum_of_rewards = 0
+    for child in root_node.children:
+        if child.sum_of_rewards > best_sum_of_rewards:
+            action_to_take = child.action_to_get_here
+            best_sum_of_rewards = child.sum_of_rewards
+    print("action to take in root node:",action_to_take)
+    print("sum of rewards:",best_sum_of_rewards)
 
-print('Time to run:', (time.perf_counter_ns() - start_time) / 1e9, 's')
+
+    print('Time to run:', (time.perf_counter_ns() - start_time) / 1e9, 's')
+
+    return action_to_take
 
 #For timing purposes. Copy where needed, perhaps to a single round of apply_action and generate_action_list:
 #start_time = time.perf_counter_ns()
