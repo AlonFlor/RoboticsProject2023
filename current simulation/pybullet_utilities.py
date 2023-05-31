@@ -124,6 +124,7 @@ def save_data_one_frame(time_val, fps, mobile_object_IDs, image_num, view_matrix
     return image_num
 
 
+
 def push(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
     count = 0
     image_num = None
@@ -159,7 +160,7 @@ def push(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix
 
 
 def let_time_pass(pusherID, dt, mobile_object_IDs, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None):
-    #for pusher
+    '''let time pass until objects are mostly still'''
     count=0
     image_num = None
     if available_image_num != None:
@@ -290,9 +291,6 @@ def save_scene_with_shifted_COMs(original_scene_file, new_scene_file, new_COM_li
         new_scene_data.append([object_type,new_COM[0],new_COM[1],new_COM[2],x+rotated[0],y+rotated[1],z+rotated[2],orient_x,orient_y,orient_z,orient_w,held_fixed])
         object_count+=1
     file_handling.write_csv_file(new_scene_file, "object_type,COM_x,COM_y,COM_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", new_scene_data)
-
-#def reset_sim():
-#
 
 
 

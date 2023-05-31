@@ -8,12 +8,13 @@ import file_handling
 import os
 
 push_distance = 0.15
-reward_discount = 0.9
+reward_discount = 0.8
 
-explore_factor = 0.5
-maximum_depth = 2#3#5
+explore_factor = 0.1
+maximum_depth = 4
 pushing_point_free_space_radius = 0.015 / 2
 cylinder_height_offset = np.array([0.,0.,0.02])
+iteration_limit = 150
 
 image_num = 0
 
@@ -124,7 +125,8 @@ class node:
         return binID
 
 
-    def apply_action(self, dt, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, binID, view_matrix=None, proj_matrix=None):
+    def apply_action(self, dt, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, binID, target_index,
+                     view_matrix=None, proj_matrix=None):
         global image_num
 
         #do not repeat actions
@@ -176,13 +178,12 @@ class node:
         p_utils.save_scene(os.path.join(self.node_dir,"scene.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
         #reward function
-        #TODO make a more formal version of this, or at least allow the target object ID to be defined elsewhere
         if self.action_type=="grasp":
             grasp_ray = p.rayTest(self.point_1, self.point_2)
             if len(grasp_ray) > 0:
                 grasped_object_id = grasp_ray[0][0]
-                if grasped_object_id == mobile_object_IDs[1]:
-                    reward+=100.
+                if grasped_object_id == mobile_object_IDs[target_index]:
+                    reward+=1.
 
         if view_matrix is not None:
             p_utils.print_image(view_matrix,proj_matrix,self.test_dir,image_num)
@@ -329,7 +330,7 @@ Step 3ba is run serially, to avoid collisions/race conditions in numbering the n
 Step 3bb is run in parallel, picking up on the same processes used for 3a.
 3c is run serially, to avoid race conditions in updating rewards and number of times visited up the chain.
 '''
-def MCTS(test_dir, dt, scene_file, view_matrix=None, proj_matrix=None):
+def MCTS(test_dir, dt, scene_file, target_index, view_matrix=None, proj_matrix=None):
     start_time = time.perf_counter_ns()
 
     mobile_object_IDs = []
@@ -347,10 +348,18 @@ def MCTS(test_dir, dt, scene_file, view_matrix=None, proj_matrix=None):
     total_expansion_count = 0
     number_of_nodes = 1
 
+    #if a direct child of the root node is a grasp, return it
+    for action in root_node.officially_unexplored_actions:
+        if action[0]=='grasp':
+            print("Found a grasp action, returning it.")
+            return action
 
     while True:
         node_to_expand = root_node.select_node_to_expand(explore_factor)
         if len(node_to_expand.children)==0 and len(node_to_expand.officially_unexplored_actions)==0:
+            break
+        print("iteration",official_child_expansion_count)
+        if official_child_expansion_count == iteration_limit:
             break
         official_child_expansion_count += 1
         total_expansion_count += 1
@@ -358,7 +367,7 @@ def MCTS(test_dir, dt, scene_file, view_matrix=None, proj_matrix=None):
         node_to_expand.create_child()
         n = node_to_expand.children[-1]
         number_of_nodes = n.nodeNum + 1
-        n.apply_action(dt, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, binID, view_matrix, proj_matrix)
+        n.apply_action(dt, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, binID, target_index, view_matrix, proj_matrix)
         print("child:",n.nodeNum,f'\t\t{len(n.officially_unexplored_actions)} actions')
         current_node = n
         while len(current_node.officially_unexplored_actions) != 0:
@@ -368,26 +377,25 @@ def MCTS(test_dir, dt, scene_file, view_matrix=None, proj_matrix=None):
             current_node = current_node.unrecognized_children[unrecognized_child_index][1]
             if current_node.nodeNum <= number_of_nodes:
                 number_of_nodes = current_node.nodeNum + 1
-            current_node.apply_action(dt, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, binID, view_matrix, proj_matrix)
+            current_node.apply_action(dt, mobile_object_IDs, mobile_object_types, held_fixed_list, precomputed_pushing_points_and_point_pairs, binID, target_index,
+                                      view_matrix, proj_matrix)
             print("unrecognized child:", current_node.nodeNum,f'\t\t{len(current_node.officially_unexplored_actions)} actions')
         n.back_propagate(current_node.node_reward)
 
-        print('\t\t\tTime to run so far:', (time.perf_counter_ns() - start_time) / 1e9, 's')
+        #print('\t\t\tTime to run so far:', (time.perf_counter_ns() - start_time) / 1e9, 's')
 
     print(f"expanded {official_child_expansion_count} recognized children")
     print(f"expanded {total_expansion_count} nodes in total")
-    print("Note: for both of these numbers, repeats were not factored out")
-    print("Number of unique nodes expanded:",number_of_nodes)
 
+    #return the child of the root node with the highest sum of rewards, unless a grasping action is possible. In the latter case, return the grasp no matter what.
     action_to_take = None
     best_sum_of_rewards = 0
     for child in root_node.children:
-        if child.sum_of_rewards > best_sum_of_rewards:
+        if child.sum_of_rewards >= best_sum_of_rewards:
             action_to_take = child.action_to_get_here
             best_sum_of_rewards = child.sum_of_rewards
     print("action to take in root node:",action_to_take)
     print("sum of rewards:",best_sum_of_rewards)
-
 
     print('Time to run:', (time.perf_counter_ns() - start_time) / 1e9, 's')
 

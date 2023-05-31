@@ -68,7 +68,7 @@ while True:
     #apply MCTS
     MCTS_dir = os.path.join(test_dir,f"MCTS_{scenario_loop_index}")
     os.mkdir(MCTS_dir)
-    next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file)#, view_matrix, proj_matrix)
+    next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, 3)#, view_matrix, proj_matrix)
     p.resetSimulation()
     p.setGravity(0, 0, -9.8)
 
