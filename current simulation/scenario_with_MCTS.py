@@ -48,7 +48,7 @@ def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, im
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 0, -75)
 
 
-def run_scenario(scene_number, accurate_COMs):
+def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=False):
     # make directory for simulation files
     testNum = 1
     while os.path.exists("test" + str(testNum)):
@@ -83,9 +83,15 @@ def run_scenario(scene_number, accurate_COMs):
         MCTS_dir = os.path.join(test_dir,f"MCTS_{scenario_loop_index}")
         os.mkdir(MCTS_dir)
         if accurate_COMs:
-            next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, 1)#, view_matrix, proj_matrix)
+            if with_MCTS_images:
+                next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index, view_matrix, proj_matrix)
+            else:
+                next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index)
         else:
-            next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file_for_MCTS, 1)#, view_matrix, proj_matrix)
+            if with_MCTS_images:
+                next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file_for_MCTS, target_index, view_matrix, proj_matrix)
+            else:
+                next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file_for_MCTS, target_index)
         p.resetSimulation()
         p.setGravity(0, 0, -9.8)
 
@@ -122,11 +128,13 @@ number_of_tries = 5
 tally_for_accurate_COMs = 0
 tally_for_inaccurate_COMs = 0
 for i in np.arange(number_of_tries):
-    tally_for_accurate_COMs += run_scenario(9, True)
+    tally_for_accurate_COMs += run_scenario(9, True, 1)
 for i in np.arange(number_of_tries):
-    tally_for_inaccurate_COMs += run_scenario(9, False)
+    tally_for_inaccurate_COMs += run_scenario(9, False, 1)
 
 print(f"With accurate COMs, total number of moves across {number_of_tries} trials was {tally_for_accurate_COMs}")
 print(f"With the wrong COMs, total number of moves across {number_of_tries} trials was {tally_for_inaccurate_COMs}")
+
+#run_scenario(3,True,8,True)
 
 p.disconnect()
