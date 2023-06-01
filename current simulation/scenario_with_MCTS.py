@@ -124,7 +124,7 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
 
     return scenario_loop_index
 
-number_of_tries = 5
+'''number_of_tries = 5
 tally_for_accurate_COMs = 0
 tally_for_inaccurate_COMs = 0
 for i in np.arange(number_of_tries):
@@ -133,8 +133,9 @@ for i in np.arange(number_of_tries):
     tally_for_inaccurate_COMs += run_scenario(9, False, 1)
 
 print(f"With accurate COMs, total number of moves across {number_of_tries} trials was {tally_for_accurate_COMs}")
-print(f"With the wrong COMs, total number of moves across {number_of_tries} trials was {tally_for_inaccurate_COMs}")
+print(f"With the wrong COMs, total number of moves across {number_of_tries} trials was {tally_for_inaccurate_COMs}")'''
 
 #run_scenario(3,True,8,True)
+run_scenario(9,True,1,True)
 
 p.disconnect()
