@@ -42,7 +42,7 @@ class node:
         self.parent = parent
         self.action_to_get_here = action
         self.reward = None
-        self.Q = 0
+        self.Q = 0.
         self.number_of_visits = 0
         self.children = []
         self.unrecognized_children = []
@@ -177,12 +177,11 @@ class node:
         if view_matrix is not None:
             p_utils.print_image(view_matrix,proj_matrix,self.test_dir,image_num)
 
-        if self.action_type == "push":
-            if not unsuccessful_push:
-                #save the actions that can be taken from this node
-                self.generate_action_lists(mobile_object_IDs, mobile_object_types, precomputed_pushing_points_and_point_pairs, view_matrix, proj_matrix)
-            #else:
-            #    print("push failed")
+        if not unsuccessful_push:
+            #save the actions that can be taken from this node
+            self.generate_action_lists(mobile_object_IDs, mobile_object_types, precomputed_pushing_points_and_point_pairs, view_matrix, proj_matrix)
+        #else:
+        #    print("push failed")
 
         if view_matrix is not None:
             image_num+=1
@@ -201,9 +200,6 @@ class node:
 
     def generate_action_lists(self, mobile_object_IDs, mobile_object_types, precomputed_pushing_points_and_point_pairs, view_matrix=None, proj_matrix=None):
         global image_num
-
-        if self.depth == maximum_depth:
-            return []
 
         candidate_list = []
 
@@ -302,18 +298,20 @@ class node:
                 p.removeBody(point_id)
 
 
-        self.officially_unexplored_push_actions += push_list
+        if self.depth < maximum_depth:
+            self.officially_unexplored_push_actions += push_list
         self.grasp_actions += grasp_list
 
 
 
     def reward_function(self, mobile_object_IDs, target_index):
         '''If a grasp on the target object is available from this node, this node gets a reward. Otherwise, reward=0.'''
-        for i,action in enumerate(self.grasp_actions):
+        for action in self.grasp_actions:
             if action[0] == "grasp":
                 grasp_ray = p.rayTest(action[1], action[2])
                 if len(grasp_ray) > 0:
                     grasped_object_id = grasp_ray[0][0]
+                    #print("grasped_object_id",grasped_object_id,"\ttarget is",mobile_object_IDs[target_index])
                     if grasped_object_id == mobile_object_IDs[target_index]:
                         return np.power(reward_discount, self.depth) * basic_reward
         return 0
@@ -403,7 +401,7 @@ def MCTS(test_dir, dt, scene_file, target_index, view_matrix=None, proj_matrix=N
         node_to_expand = root_node.select_node_to_expand(explore_factor)
         if len(node_to_expand.children)==0 and len(node_to_expand.officially_unexplored_push_actions)==0:
             break
-        print("iteration",official_child_expansion_count)
+        #print("iteration",official_child_expansion_count)
         if official_child_expansion_count == iteration_limit:
             break
         official_child_expansion_count += 1
@@ -451,7 +449,7 @@ def MCTS(test_dir, dt, scene_file, target_index, view_matrix=None, proj_matrix=N
     print("Root node has",len(root_node.children),"children and",len(root_node.unrecognized_children),"unrecognized children")
     for child in root_node.children:
         Q_over_number_of_visits = child.Q / child.number_of_visits
-        print(f"Node {child.nodeNum}:", Q_over_number_of_visits, child.Q, child.number_of_visits,"\t\t\t",child.reward)
+        #print(f"Node {child.nodeNum}:", Q_over_number_of_visits, child.Q, child.number_of_visits,"\t\t\t",child.reward)
         if Q_over_number_of_visits >= best_Q_over_number_of_visits:
             chosen_node = child.nodeNum
             action_to_take = child.action_to_get_here

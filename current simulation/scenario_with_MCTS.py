@@ -5,10 +5,6 @@ import pybullet_utilities as p_utils
 import MCTS_v1
 import os
 
-
-physicsClient = p.connect(p.DIRECT)
-#physicsClient = p.connect(p.GUI)
-p.setGravity(0, 0, -9.8)
 dt = 1./240.
 
 '''
@@ -19,7 +15,7 @@ Plan:
 3. simulate next action, save the images and make a video
 '''
 
-def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, imgs_dir, available_image_num):
+def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, imgs_dir, available_image_num, view_matrix, proj_matrix):
     mobile_object_IDs = []
     mobile_object_types = []
     held_fixed_list = []
@@ -45,10 +41,14 @@ def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, im
         p_utils.save_scene(os.path.join(action_test_dir, "scene.csv"), binID, mobile_object_IDs, mobile_object_types,held_fixed_list)
     return available_image_num
 
-view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 0, -75)
-
 
 def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=False):
+    physicsClient = p.connect(p.DIRECT)
+    # physicsClient = p.connect(p.GUI)
+    p.setGravity(0, 0, -9.8)
+
+    view_matrix, proj_matrix = p_utils.set_up_camera((0., 0., 0.), 0.75, 0, -75)
+
     # make directory for simulation files
     testNum = 1
     while os.path.exists("test" + str(testNum)):
@@ -110,7 +110,7 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
             p_utils.print_image(view_matrix,proj_matrix,test_dir,0,"_final result")
             scenario_loop_index += 1
             break
-        scenario_image_num = apply_action_in_scenario(scene_file, action_dir, next_action, image_folder, scenario_image_num)
+        scenario_image_num = apply_action_in_scenario(scene_file, action_dir, next_action, image_folder, scenario_image_num, view_matrix, proj_matrix)
         p.resetSimulation()
         p.setGravity(0, 0, -9.8)
 
@@ -119,25 +119,29 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
 
         scenario_loop_index += 1
 
+        #input("Press enter to proceed")
+
     p_utils.make_video(test_dir,image_folder)
     print(f"Took {scenario_loop_index} attempts")
 
+    p.disconnect()
+
     return scenario_loop_index
 
-'''number_of_tries = 10
+number_of_tries = 5
 tally_for_accurate_COMs = 0
 tally_for_inaccurate_COMs = 0
 for i in np.arange(number_of_tries):
     tally_for_accurate_COMs += run_scenario(9, True, 1)
-#for i in np.arange(number_of_tries):
-#    tally_for_inaccurate_COMs += run_scenario(9, False, 1)
+for i in np.arange(number_of_tries):
+    tally_for_inaccurate_COMs += run_scenario(9, False, 1)
 
 print(f"With accurate COMs, total number of moves across {number_of_tries} trials was {tally_for_accurate_COMs},"+
       f" for {float(tally_for_accurate_COMs)/float(number_of_tries)} moves per trial.")
-#print(f"With the wrong COMs, total number of moves across {number_of_tries} trials was {tally_for_inaccurate_COMs},"+
-#      f" for {float(tally_for_inaccurate_COMs)/float(number_of_tries)} moves per trial.")'''
+print(f"With the wrong COMs, total number of moves across {number_of_tries} trials was {tally_for_inaccurate_COMs},"+
+      f" for {float(tally_for_inaccurate_COMs)/float(number_of_tries)} moves per trial.")
 
 #run_scenario(3,True,8,True)
-run_scenario(9,True,1)
+#run_scenario(9,True,1)
 
-p.disconnect()
+
