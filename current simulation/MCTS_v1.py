@@ -394,7 +394,7 @@ def MCTS(test_dir, dt, scene_file, target_index, view_matrix=None, proj_matrix=N
                 grasped_object_id = grasp_ray[0][0]
                 if grasped_object_id == mobile_object_IDs[target_index]:
                     print("Found a grasp action, returning it.")
-                    return action
+                    return None, action
 
     while True:
         node_to_expand = root_node.select_node_to_expand(explore_factor)
@@ -459,7 +459,7 @@ def MCTS(test_dir, dt, scene_file, target_index, view_matrix=None, proj_matrix=N
 
     print('Time to run:', (time.perf_counter_ns() - start_time) / 1e9, 's')
 
-    return action_to_take
+    return chosen_node, action_to_take
 
 #For timing purposes. Copy where needed, perhaps to a single round of apply_action and generate_action_lists:
 #start_time = time.perf_counter_ns()

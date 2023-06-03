@@ -63,10 +63,11 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
     image_folder = os.path.join(test_dir, "imgs")
     os.mkdir(image_folder)
 
-    previous_scene_file = os.path.join("scenes",f"scene_{scene_number}.csv")
+    previous_scene_file = os.path.join("scenes",f"scene_{scene_number}_shifted_COM.csv")
     if not accurate_COMs:
         scene_data = file_handling.read_csv_file(previous_scene_file, [str, float, float, float, float, float, float, float, float, float, float, int])
-        COM_list_per_object = {"bin":(0.,0.,0.), "cracker_box":(-0.02,-0.04,0.16), "pudding_box":(0.03,0.02,0.015), "master_chef_can":(0.02,-0.02,0.06)}
+        #COM_list_per_object = {"bin":(0.,0.,0.), "cracker_box":(-0.02,-0.04,0.16), "pudding_box":(0.03,0.02,0.015), "master_chef_can":(0.02,-0.02,0.06)}
+        COM_list_per_object = {"bin":(0.,0.,0.), "cracker_box":(-0.01,-0.01,0.08), "pudding_box":(0.0,0.0,0.015), "master_chef_can":(-0.015,-0.01,0.06)}
         new_COM_list = []
         for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
             new_COM_list.append(COM_list_per_object[object_type])
@@ -86,16 +87,27 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
         os.mkdir(MCTS_dir)
         if accurate_COMs:
             if with_MCTS_images:
-                next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index, view_matrix, proj_matrix)
+                chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index, view_matrix, proj_matrix)
             else:
-                next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index)
+                chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index)
         else:
             if with_MCTS_images:
-                next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file_for_MCTS, target_index, view_matrix, proj_matrix)
+                chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file_for_MCTS, target_index, view_matrix, proj_matrix)
             else:
-                next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file_for_MCTS, target_index)
+                chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file_for_MCTS, target_index)
         p.resetSimulation()
         p.setGravity(0, 0, -9.8)
+
+        #print an image of the MCTS prediction
+        if chosen_node is not None:
+            mobile_object_IDs = []
+            mobile_object_types = []
+            held_fixed_list = []
+            node_path = os.path.join(MCTS_dir, f"node_{chosen_node}")
+            p_utils.open_saved_scene(os.path.join(node_path,"scene.csv"), node_path, None, None, mobile_object_IDs, mobile_object_types, held_fixed_list)
+            p_utils.print_image(view_matrix, proj_matrix, test_dir, None, f"MCTS_prediction_{scenario_loop_index}")
+            p.resetSimulation()
+            p.setGravity(0, 0, -9.8)
 
         #apply the action found by MCTS
         print("applying action",scenario_loop_index,"\t",next_action)
@@ -110,13 +122,14 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
             point_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=MCTS_v1.pushing_point_free_space_radius)
             p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[1])
             p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[2])
-            p_utils.print_image(view_matrix,proj_matrix,test_dir,0,"_final result")
+            p_utils.print_image(view_matrix,proj_matrix,test_dir,None,"final result")
 
             scenario_loop_index += 1
             p.resetSimulation()
             p.setGravity(0, 0, -9.8)
             break
         scenario_image_num = apply_action_in_scenario(scene_file, action_dir, next_action, image_folder, scenario_image_num, view_matrix, proj_matrix)
+        p_utils.print_image(view_matrix, proj_matrix, test_dir, None, f"action_{scenario_loop_index}")
         p.resetSimulation()
         p.setGravity(0, 0, -9.8)
 
@@ -131,7 +144,7 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
     return scenario_loop_index
 
 
-number_of_tries = 10
+number_of_tries = 15
 tally_for_accurate_COMs = 0
 tally_for_inaccurate_COMs = 0
 for i in np.arange(number_of_tries):
@@ -146,6 +159,7 @@ print(f"With the wrong COMs, total number of moves across {number_of_tries} tria
 
 #run_scenario(3,True,8,True)
 #run_scenario(9,True,1)
+#run_scenario(9,False,1)
 
 p.disconnect()
 
