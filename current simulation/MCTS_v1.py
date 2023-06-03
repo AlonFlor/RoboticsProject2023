@@ -311,7 +311,6 @@ class node:
                 grasp_ray = p.rayTest(action[1], action[2])
                 if len(grasp_ray) > 0:
                     grasped_object_id = grasp_ray[0][0]
-                    #print("grasped_object_id",grasped_object_id,"\ttarget is",mobile_object_IDs[target_index])
                     if grasped_object_id == mobile_object_IDs[target_index]:
                         return np.power(reward_discount, self.depth) * basic_reward
         return 0

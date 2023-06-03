@@ -5,6 +5,12 @@ import pybullet_utilities as p_utils
 import MCTS_v1
 import os
 
+
+physicsClient = p.connect(p.DIRECT)
+# physicsClient = p.connect(p.GUI)
+p.setGravity(0, 0, -9.8)
+
+view_matrix, proj_matrix = p_utils.set_up_camera((0., 0., 0.), 0.75, 0, -75)
 dt = 1./240.
 
 '''
@@ -42,12 +48,8 @@ def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, im
     return available_image_num
 
 
-def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=False):
-    physicsClient = p.connect(p.DIRECT)
-    # physicsClient = p.connect(p.GUI)
-    p.setGravity(0, 0, -9.8)
 
-    view_matrix, proj_matrix = p_utils.set_up_camera((0., 0., 0.), 0.75, 0, -75)
+def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=False):
 
     # make directory for simulation files
     testNum = 1
@@ -103,12 +105,16 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
             mobile_object_IDs = []
             mobile_object_types = []
             held_fixed_list = []
+
             binID = p_utils.open_saved_scene(scene_file, action_dir, None, None, mobile_object_IDs, mobile_object_types, held_fixed_list)
             point_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=MCTS_v1.pushing_point_free_space_radius)
             p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[1])
             p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[2])
             p_utils.print_image(view_matrix,proj_matrix,test_dir,0,"_final result")
+
             scenario_loop_index += 1
+            p.resetSimulation()
+            p.setGravity(0, 0, -9.8)
             break
         scenario_image_num = apply_action_in_scenario(scene_file, action_dir, next_action, image_folder, scenario_image_num, view_matrix, proj_matrix)
         p.resetSimulation()
@@ -119,16 +125,13 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
 
         scenario_loop_index += 1
 
-        #input("Press enter to proceed")
-
     p_utils.make_video(test_dir,image_folder)
     print(f"Took {scenario_loop_index} attempts")
 
-    p.disconnect()
-
     return scenario_loop_index
 
-number_of_tries = 5
+
+number_of_tries = 10
 tally_for_accurate_COMs = 0
 tally_for_inaccurate_COMs = 0
 for i in np.arange(number_of_tries):
@@ -144,4 +147,5 @@ print(f"With the wrong COMs, total number of moves across {number_of_tries} tria
 #run_scenario(3,True,8,True)
 #run_scenario(9,True,1)
 
+p.disconnect()
 
