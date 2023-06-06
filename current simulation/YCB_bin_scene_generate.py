@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import pybullet as p
 import pybullet_utilities as p_utils
@@ -11,126 +12,82 @@ while os.path.exists("test" + str(testNum)):
 test_dir = "test" + str(testNum)
 os.mkdir(test_dir)
 
-#make images directory
-imgs_dir = os.path.join(test_dir,"imgs")
-os.mkdir(imgs_dir)
-
 #physicsClient = p.connect(p.DIRECT)
 physicsClient = p.connect(p.GUI)
 p.setGravity(0, 0, -9.8)
 dt = 1./240.
 
-shapes_list = []
-motion_script = []
-
-mobile_object_IDs = []
-
-
-
-# load plane
-planeID, plane_shapes_entry = p_utils.load_object("plane", test_dir, useFixedBase=True)
-shapes_list.append(plane_shapes_entry)
-motion_script.append([])
-p_utils.add_to_motion_script(planeID, 0., motion_script)
-
-
-turned_orientation = p.getQuaternionFromEuler([0., -np.pi / 2, 0.])
-
-mobile_object_types = []
-
-
-#load bin walls
-motion_script.append([])
-bin_scale = (0.75,0.75,0.75)
-bin_collision_ID = p.createCollisionShape(p.GEOM_MESH, meshScale = bin_scale, fileName=os.path.join("object models","bin","bin.obj"))
-bin_visual_shapeID = p.createVisualShape(p.GEOM_MESH, meshScale = bin_scale, fileName=os.path.join("object models","bin","bin.obj"))
-binID = p.createMultiBody(0., bin_collision_ID, bin_visual_shapeID, (0., 0., 0.4*bin_scale[2]), p.getQuaternionFromEuler([-np.pi / 2, 0., 0.]))
-p_utils.add_to_motion_script(binID, 0., motion_script)
-shapes_list.append(["bin",[0.0,0.0,0.0]])
-
-'''for scene_num in range(9,10):#(1,8):
-    scene_data = file_handling.read_csv_file(os.path.join("scenes",f"scene_{scene_num}.csv"), [str, float, float, float, float, float, float, float, float, float, float, int])
-    COM_list_per_object = {"bin":(0.,0.,0.), "cracker_box":(-0.02,-0.04,0.16), "pudding_box":(0.03,0.02,0.015), "master_chef_can":(0.02,-0.02,0.06)}
-    new_COM_list = []
-    for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
-        new_COM_list.append(COM_list_per_object[object_type])
-    p_utils.save_scene_with_shifted_COMs(os.path.join("scenes",f"scene_{scene_num}.csv"), os.path.join("scenes",f"scene_{scene_num}_shifted_COM.csv"), new_COM_list)
-exit(0)'''
-
-#load objects
-
-objectID, object_shapes_entry = p_utils.load_object("cracker_box", test_dir, (-0.01,-0.01,0.08))
-shapes_list.append(object_shapes_entry)
-motion_script.append([])
-mobile_object_IDs.append(objectID)
-mobile_object_types.append("cracker_box")
-p.resetBasePositionAndOrientation(objectID, (0.0,0.0,0.04), p.getQuaternionFromEuler([0.,np.pi/2,0.]))
-
-objectID, object_shapes_entry = p_utils.load_object("cracker_box", test_dir, (-0.01,-0.01,0.08))
-shapes_list.append(object_shapes_entry)
-motion_script.append([])
-mobile_object_IDs.append(objectID)
-mobile_object_types.append("cracker_box")
-p.resetBasePositionAndOrientation(objectID, (0.,-0.12,0.06), p.getQuaternionFromEuler([np.pi/2,0.,np.pi/2]))
-
-objectID, object_shapes_entry = p_utils.load_object("cracker_box", test_dir, (-0.01,-0.01,0.08))
-shapes_list.append(object_shapes_entry)
-motion_script.append([])
-mobile_object_IDs.append(objectID)
-mobile_object_types.append("cracker_box")
-p.resetBasePositionAndOrientation(objectID, (0.,-0.19,0.06), p.getQuaternionFromEuler([np.pi/2,0.,np.pi/2]))
-
-objectID, object_shapes_entry = p_utils.load_object("cracker_box", test_dir, (-0.01,-0.01,0.08))
-shapes_list.append(object_shapes_entry)
-motion_script.append([])
-mobile_object_IDs.append(objectID)
-mobile_object_types.append("cracker_box")
-p.resetBasePositionAndOrientation(objectID, (0.,0.12,0.06), p.getQuaternionFromEuler([np.pi/2,0.,np.pi/2]))
-
-objectID, object_shapes_entry = p_utils.load_object("cracker_box", test_dir, (-0.01,-0.01,0.08))
-shapes_list.append(object_shapes_entry)
-motion_script.append([])
-mobile_object_IDs.append(objectID)
-mobile_object_types.append("cracker_box")
-p.resetBasePositionAndOrientation(objectID, (0.,0.19,0.06), p.getQuaternionFromEuler([np.pi/2,0.,np.pi/2]))
-
-
-
-#create pusher
-pusher_radius = 0.01
-pusher_height = 0.1
-pusher_shapeID = p.createCollisionShape(p.GEOM_CYLINDER, radius=pusher_radius, height=pusher_height)
-pusher_visual_shapeID = p.createVisualShape(p.GEOM_CYLINDER, radius=pusher_radius, length=pusher_height)
-pusherID = p.createMultiBody(1., pusher_shapeID, pusher_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
-motion_script.append([])
-shapes_list.append(["pusher",[0.0,0.0,0.0]])
-
-
-
-
-fps = 24.
 
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 45, -65)
 
-#pusher_start_pos = (0.,-0.25,0.02)
-pusher_start_pos = (0.25,0.,0.02)
-
-image_num = 0
-
-p.resetBasePositionAndOrientation(pusherID, pusher_start_pos, (0., 0., 0., 1.))
-image_num = p_utils.let_time_pass(.5, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, image_num, motion_script)
+# load plane
+planeID, plane_shapes_entry = p_utils.load_object("plane", test_dir, useFixedBase=True)
 
 
+mobile_object_types = []
+mobile_object_IDs = []
+
+
+#load bin walls
+bin_scale = (0.5,0.5,0.5)
+bin_collision_ID = p.createCollisionShape(p.GEOM_MESH, meshScale = bin_scale, fileName=os.path.join("object models","bin","bin.obj"))
+bin_visual_shapeID = p.createVisualShape(p.GEOM_MESH, meshScale = bin_scale, fileName=os.path.join("object models","bin","bin.obj"))
+binID = p.createMultiBody(0., bin_collision_ID, bin_visual_shapeID, (0., 0., 0.4*bin_scale[2]), p.getQuaternionFromEuler([-np.pi / 2, 0., 0.]))
+
+
+#define objects
+available_objects = ["cracker_box", "pudding_box", "master_chef_can", "hammer", "tomato_soup_can", "wrench", "mustard_bottle"]
+object_COMs = [(-0.01,-0.01,0.08), (0.0,0.0,0.015), (-0.015,-0.01,0.06), (-0.06,0.06,0.015), (-0.01,0.085,0.04), (0.01,-0.04,0.004), (-0.015,-0.023,0.07)]
+number_of_each_object = [4, 1, 3, 0, 3, 0,2]
+number_of_objects = 0
+for number_of_object in number_of_each_object:
+    number_of_objects += number_of_object
+
+
+def add_an_object(i, xy_range, z_range, random_loc_or=True):
+    #update the availability of the chosen object and the number of objects in total
+    number_of_each_object[i] -= 1
+    global number_of_objects
+    number_of_objects = 0
+    for number_of_object in number_of_each_object:
+        number_of_objects += number_of_object
+
+    if random_loc_or:
+        #choose a random location and orientation for the new object
+        location = (random.uniform(xy_range[0], xy_range[1]), random.uniform(xy_range[0], xy_range[1]), random.uniform(z_range[0], z_range[1]))
+        orientation = np.array([random.uniform(0.,1.), random.uniform(0.,1.), random.uniform(0.,1.), random.uniform(0.,1.)])
+        orientation = tuple(orientation / np.linalg.norm(orientation))
+
+    #add the new object
+    objectID, _ = p_utils.load_object(available_objects[i], test_dir, object_COMs[i])
+    mobile_object_IDs.append(objectID)
+    mobile_object_types.append(available_objects[i])
+    if random_loc_or:
+        p.resetBasePositionAndOrientation(objectID, location, orientation)
+
+
+#put the target object first so it is at the bottom of the pile
+add_an_object(1, (-0.05,0.05), (0.15,0.25), random_loc_or=False)
+
+#add all other objects
+while number_of_objects>0:
+    #choose the next object. If it is not available, choose another one
+    i = random.randint(0, len(available_objects) - 1)
+    while number_of_each_object[i] == 0:
+        i = random.randint(0,len(available_objects)-1)
+
+    add_an_object(i, (-0.1,0.1), (0.2,0.4))
+
+    #start the objects' motion and let the objects settle
+    for step_num in np.arange(2./dt):
+        p.stepSimulation()
+
+#save the scene
 held_fixed_list = [False for item in mobile_object_types]
 p_utils.save_scene(os.path.join(test_dir,"saved_scene.csv"), binID, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
+#print an image of the scene
+p_utils.print_image(view_matrix, proj_matrix, test_dir, 0)
 
 
 p.disconnect()
-
-
-#write motion script and shapes file
-file_handling.write_records_and_motion_script(shapes_list, test_dir, motion_script)
-
-#make a video from saved images
-p_utils.make_video(test_dir,imgs_dir)

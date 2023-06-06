@@ -31,7 +31,7 @@ held_fixed_list = []
 #p_utils.open_saved_scene(os.path.join("scenes",f"scene_{4} - no constraint.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
 #p_utils.open_saved_scene(os.path.join("scenes",f"scene_{4}_shifted_COM - no constraint.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
-binID = p_utils.open_saved_scene(os.path.join("scenes",f"scene_{9}_shifted_COM.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
+binID = p_utils.open_saved_scene(os.path.join("scenes",f"scene_{8}.csv"), test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
 
 #create pusher
@@ -46,10 +46,10 @@ shapes_list.append(["pusher",[0.0,0.0,0.0]])
 
 
 fps = 24.
-view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 0, -75)
+view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 45, -65)#0.75, 0, -75)
 
 #pusher_start_pos = (0.,-0.25,0.02)
-pusher_start_pos = (0.25,0.,0.02)
+pusher_start_pos = (0.25,0.,0.52)
 
 image_num = 0
 

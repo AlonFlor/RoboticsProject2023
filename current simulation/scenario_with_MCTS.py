@@ -138,19 +138,36 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
 
         scenario_loop_index += 1
 
+        if scenario_loop_index > 10:
+            print("failed")
+            return 0 # only counting successful cases for now
+
     p_utils.make_video(test_dir,image_folder)
+
+    MCTS_v1.time.sleep(3.)
+
+    #remove images to save space. We already made a video of them.
+    images_to_remove = os.listdir(image_folder)
+    for image_file in images_to_remove:
+        os.remove(os.path.join(image_folder,image_file))
+    os.rmdir(image_folder)
+
     print(f"Took {scenario_loop_index} attempts")
 
     return scenario_loop_index
 
 
-number_of_tries = 15
+
+scenario_start_time = MCTS_v1.time.perf_counter_ns()
+
+
+number_of_tries = 10
 tally_for_accurate_COMs = 0
 tally_for_inaccurate_COMs = 0
 for i in np.arange(number_of_tries):
-    tally_for_accurate_COMs += run_scenario(9, True, 1)
+    tally_for_accurate_COMs += run_scenario(6,True,5)#(3,True,8)#(9, True, 1)
 for i in np.arange(number_of_tries):
-    tally_for_inaccurate_COMs += run_scenario(9, False, 1)
+    tally_for_inaccurate_COMs += run_scenario(6,False,5)#(3,False,8)#9, False, 1)
 
 print(f"With accurate COMs, total number of moves across {number_of_tries} trials was {tally_for_accurate_COMs},"+
       f" for {float(tally_for_accurate_COMs)/float(number_of_tries)} moves per trial.")
@@ -160,6 +177,9 @@ print(f"With the wrong COMs, total number of moves across {number_of_tries} tria
 #run_scenario(3,True,8,True)
 #run_scenario(9,True,1)
 #run_scenario(9,False,1)
+
+
+print('Time to run all scenarios:', (MCTS_v1.time.perf_counter_ns() - scenario_start_time) / 1e9, 's')
 
 p.disconnect()
 

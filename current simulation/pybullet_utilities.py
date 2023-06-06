@@ -53,7 +53,7 @@ def print_image(view_matrix, proj_matrix, imgs_dir, image_num=None, extra_messag
     img_num_str = ""
     if image_num is not None:
         img_num_str = str(image_num).zfill(4)
-        
+
     image_filename = os.path.join(imgs_dir, img_num_str + extra_message + ".png")
     img.save(image_filename)
 
@@ -163,6 +163,50 @@ def push(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix
     return image_num
 
 
+def tilt_up(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
+    count = 0
+    image_num = None
+    if available_image_num != None:
+        image_num = available_image_num + 0
+    saving_data = not (mobile_object_IDs == None)
+
+    #first make contact with the object to tilt
+    points_len = len(p.getContactPoints(pusherID))
+    while points_len==0:
+        time_val = count * dt
+        if saving_data:
+            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, image_num, view_matrix, proj_matrix,imgs_dir, motion_script)
+
+        if time_val > time_out:
+            break  # pusher timed out
+
+        p.stepSimulation()
+
+        points_len = len(p.getContactPoints(pusherID))
+
+        # reset the pusher
+        pusher_position = p.getBasePositionAndOrientation(pusherID)[0]
+        pusher_position = (pusher_position[0], pusher_position[1], pusher_end[2])  # keep the height constant
+        p.resetBasePositionAndOrientation(pusherID, pusher_position, (0., 0., 0., 1.))
+        pusher_displacement_from_destination = pusher_end - np.array(pusher_position)
+        pusher_dist_from_destination = np.linalg.norm(pusher_displacement_from_destination)
+        pusher_speed = .1
+        new_pusher_velocity = pusher_speed * pusher_displacement_from_destination / pusher_dist_from_destination
+        p.resetBaseVelocity(pusherID, (new_pusher_velocity[0], new_pusher_velocity[1], new_pusher_velocity[2]),
+                            (0., 0., 0.))
+
+        count += 1
+
+    #once contact is made, push a little further for 0.1 seconds
+    push(pusher_end, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script, 0.1)
+
+    #move the end point up to make the motion a tilt
+    tilt_up_pusher_end = pusher_end + np.array([0.,0.,0.1])
+    push(tilt_up_pusher_end, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script, time_out)
+
+    return image_num
+
+
 
 def let_time_pass(pusherID, dt, mobile_object_IDs, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None):
     '''let time pass until objects are mostly still'''
@@ -197,6 +241,7 @@ def let_time_pass(pusherID, dt, mobile_object_IDs, fps=None, view_matrix=None, p
 
 
 
+
 def quaternion_multiplication(q1, q2):
     r1 = q1[3]
     r2 = q2[3]
@@ -215,6 +260,7 @@ def rotate_vector(vec, quat):
 
 
 
+
 def open_saved_scene(scene_file, test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list):
     scene_data = file_handling.read_csv_file(scene_file, [str, float, float, float, float, float, float, float, float, float, float, int])
 
@@ -229,7 +275,7 @@ def open_saved_scene(scene_file, test_dir, shapes_list, motion_script, mobile_ob
 
     for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
         if object_type=="bin":
-            bin_scale = (0.75, 0.75, 0.75)
+            bin_scale = (0.5, 0.5, 0.5)
             bin_collision_ID = p.createCollisionShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
             bin_visual_shapeID = p.createVisualShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
             bin_mass = 1.-held_fixed
@@ -269,7 +315,7 @@ def open_saved_scene_existing_objects(scene_file,mobile_object_IDs):
 def save_scene(scene_file, binID, mobile_object_IDs, mobile_object_types, held_fixed_list):
     bin_pose, bin_orientation = p.getBasePositionAndOrientation(binID)
     bin_mass = p.getDynamicsInfo(binID,-1)[0]
-    data = [["bin", 0., 0., 0., bin_pose[0], bin_pose[1], bin_pose[2]/0.75, bin_orientation[0], bin_orientation[1], bin_orientation[2], bin_orientation[3], int(1.-bin_mass)]]
+    data = [["bin", 0., 0., 0., bin_pose[0], bin_pose[1], bin_pose[2]/0.5, bin_orientation[0], bin_orientation[1], bin_orientation[2], bin_orientation[3], int(1.-bin_mass)]]
     for i in np.arange(len(mobile_object_IDs)):
         ID = mobile_object_IDs[i]
         object_type = mobile_object_types[i]
@@ -296,6 +342,7 @@ def save_scene_with_shifted_COMs(original_scene_file, new_scene_file, new_COM_li
         new_scene_data.append([object_type,new_COM[0],new_COM[1],new_COM[2],x+rotated[0],y+rotated[1],z+rotated[2],orient_x,orient_y,orient_z,orient_w,held_fixed])
         object_count+=1
     file_handling.write_csv_file(new_scene_file, "object_type,COM_x,COM_y,COM_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", new_scene_data)
+
 
 
 
@@ -416,10 +463,10 @@ def get_points_from_ply_file(points_file_path):
     return points
 
 
-'''rm = np.array(p.getMatrixFromQuaternion(p.getQuaternionFromEuler((0.,0.,28*np.pi/180)))).reshape((3,3))
-center = np.array([0.,0.018,0.015])
+'''rm = np.array(p.getMatrixFromQuaternion(p.getQuaternionFromEuler((0.,0.,-23*np.pi/180)))).reshape((3,3))
+center = np.array([-0.015,-0.023,0.07])
 def rotate_and_add(v):
     return np.matmul(rm,v) + center
-v = [0.03,0,0.035,0.03,0,-0.035]
+v = [-0.005,-0.026,-0.02,-0.005,-0.026,0.21]
 print(rotate_and_add(np.array(v[:3])))
 print(rotate_and_add(np.array(v[3:6])))'''
