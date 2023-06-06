@@ -12,10 +12,11 @@ reward_discount = 0.8
 basic_reward = 1.#00.
 
 explore_factor = 0.5
-maximum_depth = 4
+maximum_depth = 7#4
 pushing_point_free_space_radius = 0.015 / 2
-cylinder_height_offset = np.array([0.,0.,0.02])
-iteration_limit = 150
+cylinder_height = 0.20#0.05
+cylinder_height_offset = np.array([0.,0.,0.1])#np.array([0.,0.,0.02])
+iteration_limit = 250#150
 
 image_num = 0
 
@@ -142,32 +143,38 @@ class node:
         self.action_type, self.point_1, self.point_2 = self.action_to_get_here
         #action_type is either "push" or "grasp"
         #if it is "push", then point_1 is the pusher starting point, and point_2-point_1 forms the pushing vector
-        #if it is "grasp", then point_1 and point_2 are the points of the grasp.
+        #if it is "tilt up", then point_1 is the pusher starting point, and point_2-point_1 forms the initial pushing vector, but point_2 is adjusted upwards after the initial push
+        #if it is "grasp", then point_1 and point_2 are the points of the grasp. This function does not handle grasps, they are not currently simulated.
 
         unsuccessful_push = False
 
         #create cylinder
-        cylinderID = p_utils.create_cylinder(pushing_point_free_space_radius, 0.05)
+        cylinderID = p_utils.create_cylinder(pushing_point_free_space_radius, cylinder_height)
         p.resetBasePositionAndOrientation(cylinderID, self.point_1+cylinder_height_offset, (0., 0., 0., 1.))
 
+        if self.action_type == "push":
+            #push
+            #TODO replace this with actual robot push?
+            push_vector = self.point_2 - self.point_1
+            push_vector = push_distance * push_vector / np.linalg.norm(push_vector)
+            pusher_end = self.point_1 + push_vector + cylinder_height_offset
+            cylinder_original_point, _ = p.getBasePositionAndOrientation(cylinderID)
+            p_utils.push(pusher_end, cylinderID, dt, time_out=2.)
+            cylinder_new_point, _ = p.getBasePositionAndOrientation(cylinderID)
+            p_utils.let_time_pass(cylinderID, dt,mobile_object_IDs)
 
-        #push
-        #TODO replace this with actual robot push?
-        push_vector = self.point_2 - self.point_1
-        push_vector = push_distance * push_vector / np.linalg.norm(push_vector)
-        pusher_end = self.point_1 + push_vector + cylinder_height_offset
-        cylinder_original_point, _ = p.getBasePositionAndOrientation(cylinderID)
-        p_utils.push(pusher_end, cylinderID, dt, time_out=2.)
-        cylinder_new_point, _ = p.getBasePositionAndOrientation(cylinderID)
-        p_utils.let_time_pass(cylinderID, dt,mobile_object_IDs)
-
-        #see if the push was successful or not, by seeing if the pusher moved even a tenth of the requested amount.
-        actual_push_distance = np.linalg.norm(np.array(cylinder_new_point) - np.array(cylinder_original_point))
-        if actual_push_distance < 0.1*push_distance:
-            unsuccessful_push = True
-            # since actual_push_distance < 0.1*push_distance, the push failed, so this node should not have been opened/existed.
-            # Since this node should not have existed, it should at least be a dead end with no further actions to be taken.
-            # By setting unsuccessful_push=True, this node is marked as a dead end.
+            #see if the push was successful or not, by seeing if the pusher moved even a tenth of the requested amount.
+            actual_push_distance = np.linalg.norm(np.array(cylinder_new_point) - np.array(cylinder_original_point))
+            #print("push distance:",push_distance, "actual push distance:",actual_push_distance)
+            if actual_push_distance < 0.4*push_distance:
+                unsuccessful_push = True
+                # since actual_push_distance < 0.4*push_distance, the push failed, so this node should not have been opened/existed.
+                # Since this node should not have existed, it should at least be a dead end with no further actions to be taken.
+                # By setting unsuccessful_push=True, this node is marked as a dead end.
+        elif self.action_type == "tilt up":
+            #tilt up
+            p_utils.tilt_up(self.point_2 + cylinder_height_offset, cylinderID, dt, time_out=2.)
+            p_utils.let_time_pass(cylinderID, dt,mobile_object_IDs)
 
         p.removeBody(cylinderID)
 
@@ -214,7 +221,7 @@ class node:
                 #precomputed pushing points are already transformed by COM when loaded, so only transforming them here by object position and orientation
                 transformed_points[point_index] = p_utils.rotate_vector(points[point_index], orientation) + position
 
-            #filter edges so that those edges on top of each other are not repeated. Save the median height for these overlaping edges
+            '''#filter edges so that those edges on top of each other are not repeated. Save the median height for these overlaping edges
             filtered_edges = []
             heights = []
             for j in np.arange(len(edges)):
@@ -239,24 +246,24 @@ class node:
             final_heights = []
             for k in np.arange(len(heights)):
                 heights[k].sort()
-                final_heights.append(heights[k][int(len(heights[k])/2)])
+                final_heights.append(heights[k][int(len(heights[k])/2)])'''
 
             #add points to candidate lists
-            for j in np.arange(len(filtered_edges)):
-                point1_index, point2_index = filtered_edges[j]
+            for j in np.arange(len(edges)):
+                point1_index, point2_index = edges[j]
 
                 # every single pushing point has a partner in an edge. Therefore, pushing points and their directions are calculated by edge.
                 point_1 = transformed_points[point1_index]
                 point_2 = transformed_points[point2_index]
                 if np.linalg.norm(point_1[:2] - point_2[:2]) > 0.01:
-                    point_1[2] = final_heights[j]
-                    point_2[2] = final_heights[j]
+                    #point_1[2] = final_heights[j]
+                    #point_2[2] = final_heights[j]
                     candidate_list.append((point_1, point_2))
                     candidate_list.append((point_2, point_1))
 
 
         #create a test pusher cylinder for collision checking. The cylinder is placed at each candidate pushing point to test if it is valid. Invalid pushing points are filtered out.
-        cylinderID = p_utils.create_cylinder(pushing_point_free_space_radius, 0.05)
+        cylinderID = p_utils.create_cylinder(pushing_point_free_space_radius, cylinder_height)
 
         # filter the pushing points. If the cylinder, when placed at a pushing point, overlaps with an object, that point is out.
         # If both pushing points in a pair get added in, and the distance between then is less than 15 cm, then add a grasp.

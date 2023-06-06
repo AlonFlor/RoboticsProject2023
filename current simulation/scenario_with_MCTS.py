@@ -7,7 +7,7 @@ import os
 
 
 physicsClient = p.connect(p.DIRECT)
-# physicsClient = p.connect(p.GUI)
+#physicsClient = p.connect(p.GUI)
 p.setGravity(0, 0, -9.8)
 
 view_matrix, proj_matrix = p_utils.set_up_camera((0., 0., 0.), 0.75, 0, -75)
@@ -33,7 +33,7 @@ def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, im
         pass
     else:
         # create cylinder
-        cylinderID = p_utils.create_cylinder(MCTS_v1.pushing_point_free_space_radius, 0.05)
+        cylinderID = p_utils.create_cylinder(MCTS_v1.pushing_point_free_space_radius, MCTS_v1.cylinder_height)
         p.resetBasePositionAndOrientation(cylinderID, point_1+MCTS_v1.cylinder_height_offset, (0., 0., 0., 1.))
 
         #push
@@ -49,7 +49,7 @@ def apply_action_in_scenario(scene_file, action_test_dir, action_to_get_here, im
 
 
 
-def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=False):
+def run_scenario(scene_number, target_index, with_MCTS_images=False):
 
     # make directory for simulation files
     testNum = 1
@@ -63,14 +63,7 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
     image_folder = os.path.join(test_dir, "imgs")
     os.mkdir(image_folder)
 
-    previous_scene_file = os.path.join("scenes",f"scene_{scene_number}_shifted_COM.csv")
-    if not accurate_COMs:
-        scene_data = file_handling.read_csv_file(previous_scene_file, [str, float, float, float, float, float, float, float, float, float, float, int])
-        #COM_list_per_object = {"bin":(0.,0.,0.), "cracker_box":(-0.02,-0.04,0.16), "pudding_box":(0.03,0.02,0.015), "master_chef_can":(0.02,-0.02,0.06)}
-        COM_list_per_object = {"bin":(0.,0.,0.), "cracker_box":(-0.01,-0.01,0.08), "pudding_box":(0.0,0.0,0.015), "master_chef_can":(-0.015,-0.01,0.06)}
-        new_COM_list = []
-        for object_type,com_x,com_y,com_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
-            new_COM_list.append(COM_list_per_object[object_type])
+    previous_scene_file = os.path.join("scenes",f"scene_{scene_number}.csv")
 
 
     scenario_loop_index = 0
@@ -78,23 +71,15 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
         #get the scene
         scene_file = os.path.join(test_dir,f"scene_{scenario_loop_index}.csv")
         file_handling.copy_file(previous_scene_file, scene_file)
-        if not accurate_COMs:
-            scene_file_for_MCTS = os.path.join(test_dir, f"scene_{scenario_loop_index}_shifted_COM.csv")
-            p_utils.save_scene_with_shifted_COMs(scene_file, scene_file_for_MCTS, new_COM_list)
 
         #apply MCTS
         MCTS_dir = os.path.join(test_dir,f"MCTS_{scenario_loop_index}")
         os.mkdir(MCTS_dir)
-        if accurate_COMs:
-            if with_MCTS_images:
-                chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index, view_matrix, proj_matrix)
-            else:
-                chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index)
+        if with_MCTS_images:
+            chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index, view_matrix, proj_matrix)
         else:
-            if with_MCTS_images:
-                chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file_for_MCTS, target_index, view_matrix, proj_matrix)
-            else:
-                chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file_for_MCTS, target_index)
+            chosen_node, next_action = MCTS_v1.MCTS(MCTS_dir, dt, scene_file, target_index)
+
         p.resetSimulation()
         p.setGravity(0, 0, -9.8)
 
@@ -120,6 +105,7 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
 
             binID = p_utils.open_saved_scene(scene_file, action_dir, None, None, mobile_object_IDs, mobile_object_types, held_fixed_list)
             point_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=MCTS_v1.pushing_point_free_space_radius)
+            p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[1])
             p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[1])
             p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[2])
             p_utils.print_image(view_matrix,proj_matrix,test_dir,None,"final result")
@@ -161,7 +147,7 @@ def run_scenario(scene_number, accurate_COMs, target_index, with_MCTS_images=Fal
 scenario_start_time = MCTS_v1.time.perf_counter_ns()
 
 
-number_of_tries = 10
+'''number_of_tries = 10
 tally_for_accurate_COMs = 0
 tally_for_inaccurate_COMs = 0
 for i in np.arange(number_of_tries):
@@ -172,11 +158,9 @@ for i in np.arange(number_of_tries):
 print(f"With accurate COMs, total number of moves across {number_of_tries} trials was {tally_for_accurate_COMs},"+
       f" for {float(tally_for_accurate_COMs)/float(number_of_tries)} moves per trial.")
 print(f"With the wrong COMs, total number of moves across {number_of_tries} trials was {tally_for_inaccurate_COMs},"+
-      f" for {float(tally_for_inaccurate_COMs)/float(number_of_tries)} moves per trial.")
+      f" for {float(tally_for_inaccurate_COMs)/float(number_of_tries)} moves per trial.")'''
 
-#run_scenario(3,True,8,True)
-#run_scenario(9,True,1)
-#run_scenario(9,False,1)
+run_scenario(4,0)#,True)
 
 
 print('Time to run all scenarios:', (MCTS_v1.time.perf_counter_ns() - scenario_start_time) / 1e9, 's')

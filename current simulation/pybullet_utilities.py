@@ -197,8 +197,8 @@ def tilt_up(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_mat
 
         count += 1
 
-    #once contact is made, push a little further for 0.1 seconds
-    push(pusher_end, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script, 0.1)
+    ##once contact is made, push a little further for 0.1 seconds
+    #push(pusher_end, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script, 0.1)
 
     #move the end point up to make the motion a tilt
     tilt_up_pusher_end = pusher_end + np.array([0.,0.,0.1])
