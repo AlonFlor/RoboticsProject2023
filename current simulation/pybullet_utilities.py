@@ -158,53 +158,17 @@ def push(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix
         new_pusher_velocity = pusher_speed * pusher_displacement_from_destination / pusher_dist_from_destination
         p.resetBaseVelocity(pusherID, (new_pusher_velocity[0], new_pusher_velocity[1], new_pusher_velocity[2]), (0., 0., 0.))
 
+        '''#Make sure object being pushed is not pushed with too much force. If it is, abort the push.
+        pusher_contacts = p.getContactPoints(pusherID)
+        if len(pusher_contacts) > 0:
+            force = pusher_contacts[0][9]
+            if force > 100.:
+                return image_num'''
+
         count += 1
 
     return image_num
 
-
-def tilt_up(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix=None, proj_matrix=None, imgs_dir=None, available_image_num=None, motion_script=None, time_out=100.):
-    count = 0
-    image_num = None
-    if available_image_num != None:
-        image_num = available_image_num + 0
-    saving_data = not (mobile_object_IDs == None)
-
-    #first make contact with the object to tilt
-    points_len = len(p.getContactPoints(pusherID))
-    while points_len==0:
-        time_val = count * dt
-        if saving_data:
-            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, image_num, view_matrix, proj_matrix,imgs_dir, motion_script)
-
-        if time_val > time_out:
-            break  # pusher timed out
-
-        p.stepSimulation()
-
-        points_len = len(p.getContactPoints(pusherID))
-
-        # reset the pusher
-        pusher_position = p.getBasePositionAndOrientation(pusherID)[0]
-        pusher_position = (pusher_position[0], pusher_position[1], pusher_end[2])  # keep the height constant
-        p.resetBasePositionAndOrientation(pusherID, pusher_position, (0., 0., 0., 1.))
-        pusher_displacement_from_destination = pusher_end - np.array(pusher_position)
-        pusher_dist_from_destination = np.linalg.norm(pusher_displacement_from_destination)
-        pusher_speed = .1
-        new_pusher_velocity = pusher_speed * pusher_displacement_from_destination / pusher_dist_from_destination
-        p.resetBaseVelocity(pusherID, (new_pusher_velocity[0], new_pusher_velocity[1], new_pusher_velocity[2]),
-                            (0., 0., 0.))
-
-        count += 1
-
-    ##once contact is made, push a little further for 0.1 seconds
-    #push(pusher_end, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script, 0.1)
-
-    #move the end point up to make the motion a tilt
-    tilt_up_pusher_end = pusher_end + np.array([0.,0.,0.1])
-    push(tilt_up_pusher_end, pusherID, dt, mobile_object_IDs, fps, view_matrix, proj_matrix, imgs_dir, available_image_num, motion_script, time_out)
-
-    return image_num
 
 
 

@@ -106,7 +106,6 @@ def run_scenario(scene_number, target_index, with_MCTS_images=False):
             binID = p_utils.open_saved_scene(scene_file, action_dir, None, None, mobile_object_IDs, mobile_object_types, held_fixed_list)
             point_collision_shape = p.createCollisionShape(p.GEOM_SPHERE, radius=MCTS_v1.pushing_point_free_space_radius)
             p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[1])
-            p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[1])
             p.createMultiBody(baseCollisionShapeIndex=point_collision_shape, basePosition=next_action[2])
             p_utils.print_image(view_matrix,proj_matrix,test_dir,None,"final result")
 

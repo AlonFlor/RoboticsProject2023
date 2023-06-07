@@ -16,7 +16,7 @@ maximum_depth = 7#4
 pushing_point_free_space_radius = 0.015 / 2
 cylinder_height = 0.20#0.05
 cylinder_height_offset = np.array([0.,0.,0.1])#np.array([0.,0.,0.02])
-iteration_limit = 250#150
+iteration_limit = 350#150
 
 image_num = 0
 
@@ -143,7 +143,6 @@ class node:
         self.action_type, self.point_1, self.point_2 = self.action_to_get_here
         #action_type is either "push" or "grasp"
         #if it is "push", then point_1 is the pusher starting point, and point_2-point_1 forms the pushing vector
-        #if it is "tilt up", then point_1 is the pusher starting point, and point_2-point_1 forms the initial pushing vector, but point_2 is adjusted upwards after the initial push
         #if it is "grasp", then point_1 and point_2 are the points of the grasp. This function does not handle grasps, they are not currently simulated.
 
         unsuccessful_push = False
@@ -152,29 +151,25 @@ class node:
         cylinderID = p_utils.create_cylinder(pushing_point_free_space_radius, cylinder_height)
         p.resetBasePositionAndOrientation(cylinderID, self.point_1+cylinder_height_offset, (0., 0., 0., 1.))
 
-        if self.action_type == "push":
-            #push
-            #TODO replace this with actual robot push?
-            push_vector = self.point_2 - self.point_1
-            push_vector = push_distance * push_vector / np.linalg.norm(push_vector)
-            pusher_end = self.point_1 + push_vector + cylinder_height_offset
-            cylinder_original_point, _ = p.getBasePositionAndOrientation(cylinderID)
-            p_utils.push(pusher_end, cylinderID, dt, time_out=2.)
-            cylinder_new_point, _ = p.getBasePositionAndOrientation(cylinderID)
-            p_utils.let_time_pass(cylinderID, dt,mobile_object_IDs)
+        #push
+        #TODO replace this with actual robot push?
+        push_vector = self.point_2 - self.point_1
+        push_vector = push_distance * push_vector / np.linalg.norm(push_vector)
+        pusher_end = self.point_1 + push_vector + cylinder_height_offset
+        cylinder_original_point, _ = p.getBasePositionAndOrientation(cylinderID)
+        p_utils.push(pusher_end, cylinderID, dt, time_out=2.)
+        cylinder_new_point, _ = p.getBasePositionAndOrientation(cylinderID)
+        p_utils.let_time_pass(cylinderID, dt,mobile_object_IDs)
 
-            #see if the push was successful or not, by seeing if the pusher moved even a tenth of the requested amount.
-            actual_push_distance = np.linalg.norm(np.array(cylinder_new_point) - np.array(cylinder_original_point))
-            #print("push distance:",push_distance, "actual push distance:",actual_push_distance)
-            if actual_push_distance < 0.4*push_distance:
-                unsuccessful_push = True
-                # since actual_push_distance < 0.4*push_distance, the push failed, so this node should not have been opened/existed.
-                # Since this node should not have existed, it should at least be a dead end with no further actions to be taken.
-                # By setting unsuccessful_push=True, this node is marked as a dead end.
-        elif self.action_type == "tilt up":
-            #tilt up
-            p_utils.tilt_up(self.point_2 + cylinder_height_offset, cylinderID, dt, time_out=2.)
-            p_utils.let_time_pass(cylinderID, dt,mobile_object_IDs)
+        #see if the push was successful or not, by seeing if the pusher moved even a tenth of the requested amount.
+        actual_push_distance = np.linalg.norm(np.array(cylinder_new_point) - np.array(cylinder_original_point))
+        #print("push distance:",push_distance, "actual push distance:",actual_push_distance)
+        if actual_push_distance < 0.4*push_distance:
+            unsuccessful_push = True
+            #print("push failed")
+            # since actual_push_distance < 0.4*push_distance, the push failed, so this node should not have been opened/existed.
+            # Since this node should not have existed, it should at least be a dead end with no further actions to be taken.
+            # By setting unsuccessful_push=True, this node is marked as a dead end.
 
         p.removeBody(cylinderID)
 
@@ -255,11 +250,11 @@ class node:
                 # every single pushing point has a partner in an edge. Therefore, pushing points and their directions are calculated by edge.
                 point_1 = transformed_points[point1_index]
                 point_2 = transformed_points[point2_index]
-                if np.linalg.norm(point_1[:2] - point_2[:2]) > 0.01:
-                    #point_1[2] = final_heights[j]
-                    #point_2[2] = final_heights[j]
-                    candidate_list.append((point_1, point_2))
-                    candidate_list.append((point_2, point_1))
+
+                #point_1[2] = final_heights[j]
+                #point_2[2] = final_heights[j]
+                candidate_list.append((point_1, point_2))
+                candidate_list.append((point_2, point_1))
 
 
         #create a test pusher cylinder for collision checking. The cylinder is placed at each candidate pushing point to test if it is valid. Invalid pushing points are filtered out.
@@ -276,6 +271,14 @@ class node:
             p.performCollisionDetection()
             contact_results = p.getContactPoints(cylinderID)
             if len(contact_results) == 0:
+
+                # if the downward z-component has a greater magnitude than the xy component, then this just pushes the object down, so ignore it.
+                xy_component = np.linalg.norm(candidate_list[i][1][:2] - candidate_list[i][0][:2])
+                z_component = candidate_list[i][1][2] - candidate_list[i][0][2]
+                if z_component < 0:
+                    if np.abs(z_component) > xy_component:
+                        continue
+
                 push_list.append(("push", candidate_list[i][0], candidate_list[i][1]))
                 if i%2==0:
                     added_even=True
@@ -452,7 +455,7 @@ def MCTS(test_dir, dt, scene_file, target_index, view_matrix=None, proj_matrix=N
     chosen_node = 0
     action_to_take = None
     best_Q_over_number_of_visits = 0
-    print("Root node has",len(root_node.children),"children and",len(root_node.unrecognized_children),"unrecognized children")
+    #print("Root node has",len(root_node.children),"children and",len(root_node.unrecognized_children),"unrecognized children")
     for child in root_node.children:
         Q_over_number_of_visits = child.Q / child.number_of_visits
         #print(f"Node {child.nodeNum}:", Q_over_number_of_visits, child.Q, child.number_of_visits,"\t\t\t",child.reward)
