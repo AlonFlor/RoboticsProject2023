@@ -308,6 +308,16 @@ def save_scene_with_shifted_COMs(original_scene_file, new_scene_file, new_COM_li
     file_handling.write_csv_file(new_scene_file, "object_type,COM_x,COM_y,COM_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", new_scene_data)
 
 
+def save_scene_no_bin(scene_file, mobile_object_IDs, mobile_object_types, held_fixed_list):
+    data = []
+    for i in np.arange(len(mobile_object_IDs)):
+        ID = mobile_object_IDs[i]
+        object_type = mobile_object_types[i]
+        held_fixed = held_fixed_list[i]
+        pose,orientation = p.getBasePositionAndOrientation(ID)
+        COM = p.getDynamicsInfo(ID,-1)[3]
+        data.append([object_type, COM[0], COM[1], COM[2], pose[0], pose[1], pose[2], orientation[0], orientation[1], orientation[2], orientation[3], int(held_fixed)])
+    file_handling.write_csv_file(scene_file, "object_type,COM_x,COM_y,COM_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", data)
 
 
 
