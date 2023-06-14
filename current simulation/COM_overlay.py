@@ -17,19 +17,25 @@ while os.path.exists("test" + str(testNum)):
 test_dir = "test" + str(testNum)
 os.mkdir(test_dir)
 
+push_distance = 0.15
 
 
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 45, -65)
+point_visual_shape = p.createVisualShape(p.GEOM_SPHERE, radius=0.005)
 
 
 mobile_object_IDs = []
 mobile_object_types = []
 held_fixed_list = []
+mobile_object_COM_candidates = []
+mobile_object_axes = []
+mobile_object_axes_origins = []
+mobile_object_COM_candidate_probabilities = []
 
 p_utils.open_saved_scene(os.path.join("scenes","scene_COM_overlay_one_object.csv"), test_dir, None, None, mobile_object_IDs, mobile_object_types, held_fixed_list)
 
 
-def get_candidate_COMs(mobile_object_index):
+def get_candidate_COMs_and_object_axes(mobile_object_index, number_of_points_axis_0, number_of_points_axis_1):
     bounding_points = file_handling.read_csv_file(os.path.join("object models",mobile_object_types[mobile_object_index],"precomputed_bounding_points.csv"),[float, float, float])
     print(bounding_points)
     COM_ground_truth = np.array(p.getDynamicsInfo(mobile_object_IDs[mobile_object_index],-1)[3])
@@ -70,19 +76,15 @@ def get_candidate_COMs(mobile_object_index):
         point_to_eliminate_index = pair[1]
     bounding_points_transformed.pop(point_to_eliminate_index)
 
-
     #once a bounding plane has been defined, then need to create array of points corresponding to potential COMs. Points are defined relative to object
-    number_of_points_axis_0 = 10
-    number_of_points_axis_1 = 10
     axis_0_raw_values = np.linspace(0., 1., number_of_points_axis_0+2)[1:-1]
     axis_1_raw_values = np.linspace(0., 1., number_of_points_axis_1+2)[1:-1]
-    print("axis_0_raw_values",axis_0_raw_values)
-    print("axis_1_raw_values",axis_1_raw_values)
     axis_0_values = np.array([bounding_points_transformed[0]*value + bounding_points_transformed[1]*(1.-value) for value in axis_0_raw_values])
     axis_1_values = np.array([bounding_points_transformed[0]*value + bounding_points_transformed[2]*(1.-value) for value in axis_1_raw_values])
 
     plane_origin = bounding_points_transformed[0]
 
+    #get the COM candidate locs in object space
     COM_candidates_locs = []
     orientation_opposite = np.array([orientation[0], orientation[1], orientation[2], -orientation[3]])
     for value_0 in axis_0_values:
@@ -91,40 +93,108 @@ def get_candidate_COMs(mobile_object_index):
             loc_object_space = p_utils.rotate_vector(loc_world_space - position, orientation_opposite)
             COM_candidates_locs.append(loc_object_space)
 
-    return COM_candidates_locs
+    #get the object's axes in object space
+    axis_0 = bounding_points_transformed[1] - bounding_points_transformed[0]
+    axis_1 = bounding_points_transformed[2] - bounding_points_transformed[0]
+    axis_0 = axis_0 / np.linalg.norm(axis_0)
+    axis_1 = axis_1 / np.linalg.norm(axis_1)
+    axis_0_object_space = p_utils.rotate_vector(axis_0, orientation_opposite)
+    axis_1_object_space = p_utils.rotate_vector(axis_1, orientation_opposite)
+
+    origin_of_axes = p_utils.rotate_vector(plane_origin - position, orientation_opposite)
+
+    return COM_candidates_locs, (axis_0_object_space, axis_1_object_space), origin_of_axes
 
 
-COM_candidates_locs = get_candidate_COMs(0)
-point_visual_shape = p.createVisualShape(p.GEOM_SPHERE, radius=0.005)
+def get_world_space_point(point, position, orientation):
+    return p_utils.rotate_vector(point, orientation)+position
 
-position, orientation = p.getBasePositionAndOrientation(mobile_object_IDs[0])
-position = np.array(position)
-orientation = np.array(orientation)
-for value in COM_candidates_locs:
-    loc = p_utils.rotate_vector(value, orientation)+position
-    point_id = p.createMultiBody(baseVisualShapeIndex=point_visual_shape, basePosition=(loc[0], loc[1], 0.15))
-
-
-import time
-
-time_amount = 1.
-count=0
-while time_amount > 0:
-    time_val = count * dt
-    count += 1
-
-    p.stepSimulation()
-
-    time.sleep(dt)
-    time_amount -= dt
+def display_COM_candidates(mobile_object_index):
+    position, orientation = p.getBasePositionAndOrientation(mobile_object_IDs[mobile_object_index])
+    position = np.array(position)
+    orientation = np.array(orientation)
+    displayed_shapes_IDs = []
+    for value in mobile_object_COM_candidates[mobile_object_index]:
+        loc = get_world_space_point(value, position, orientation)
+        point_id = p.createMultiBody(baseVisualShapeIndex=point_visual_shape, basePosition=(loc[0], loc[1], 0.15))
+        #TODO add recoloring for different probabilities here
+        displayed_shapes_IDs.append(point_id)
+    for point_id in displayed_shapes_IDs:
+        p.removeBody(point_id)
+    displayed_shapes_IDs.clear()
 
 
-position, orientation = p.getBasePositionAndOrientation(mobile_object_IDs[0])
-position = np.array(position)
-orientation = np.array(orientation)
-for value in COM_candidates_locs:
-    loc = p_utils.rotate_vector(value, orientation)+position
-    point_id = p.createMultiBody(baseVisualShapeIndex=point_visual_shape, basePosition=(loc[0], loc[1], 0.15))
+def get_pusher_start_and_direction_points(mobile_object_index, axis_index):
+    position, orientation = p.getBasePositionAndOrientation(mobile_object_IDs[mobile_object_index])
+    position = np.array(position)
+    orientation = np.array(orientation)
+
+    #get average COM
+    avg_point = np.array([0.,0.])
+    for i in np.arange(len(mobile_object_COM_candidates[mobile_object_index])):
+        candidate = mobile_object_COM_candidates[mobile_object_index][i]
+        candidate_world_coords = get_world_space_point(candidate, position, orientation)
+        avg_point += mobile_object_COM_candidate_probabilities[mobile_object_index][i]*candidate_world_coords[:2]
+
+    #get start point
+    axis_of_start_point = mobile_object_axes[mobile_object_index][axis_index]
+    axis_of_start_point_world_space = p_utils.rotate_vector(axis_of_start_point, orientation)[:2]
+    object_origin_world_coords = get_world_space_point(mobile_object_axes_origins[mobile_object_index], position, orientation)[:2]
+    start_point = object_origin_world_coords + np.dot(avg_point - object_origin_world_coords, axis_of_start_point_world_space) * axis_of_start_point_world_space
+
+    return start_point, avg_point
+
+
+def calculate_probability_for_a_single_candidate_COM(mobile_object_index, candidate_COM_index, original_position, original_orientation, pusher_start, pusher_dir, angular_displacement):
+    candidate_COM = get_world_space_point(mobile_object_COM_candidates[mobile_object_index][candidate_COM_index], original_position, original_orientation)
+    torque = np.cross(pusher_start-candidate_COM,pusher_dir)[2]
+    
+
+#initialize COM candidates and COM axes
+for i in np.arange(len(mobile_object_IDs)):
+    COM_candidates, axes, axes_origin = get_candidate_COMs_and_object_axes(i, 10, 10)
+    mobile_object_COM_candidates.append(COM_candidates)
+    mobile_object_axes.append(axes)
+    mobile_object_axes_origins.append(axes_origin)
+    prob = 1. / len(COM_candidates)
+    mobile_object_COM_candidate_probabilities.append([prob for i in COM_candidates])
+
+
+display_COM_candidates(0)
+
+cylinderID = p_utils.create_cylinder(0.015 / 2, 0.05)
+cylinder_height_offset = np.array([0., 0., 0.02])
+
+new_angle = p.getEulerFromQuaternion(p.getBasePositionAndOrientation(mobile_object_IDs[0])[1])[2]
+
+for round_index in range(5):
+    old_angle = new_angle + 0.
+
+    #figure out where to push next
+    point_1, point_2 = get_pusher_start_and_direction_points(0, round_index%2)
+    point_1 = np.array([point_1[0],point_1[1],0.]) + cylinder_height_offset
+    point_2 = np.array([point_2[0],point_2[1],0.]) + cylinder_height_offset
+
+    direction = point_2 - point_1
+    point_2 = push_distance * direction / np.linalg.norm(direction) + point_1
+
+    #push
+    p.resetBasePositionAndOrientation(cylinderID, point_1, (0., 0., 0., 1.))
+    p_utils.push(point_2, cylinderID, dt, time_out=200.)
+    p_utils.let_time_pass(cylinderID, dt,mobile_object_IDs)
+
+    #get the new angle and angular displacement
+    new_angle = p.getEulerFromQuaternion(p.getBasePositionAndOrientation(mobile_object_IDs[0])[1])[2]
+    angular_displacement = new_angle - old_angle
+    if angular_displacement < -3 * np.pi / 4:
+        angular_displacement += 2 * np.pi
+    elif angular_displacement > 3 * np.pi / 4:
+        angular_displacement -= 2 * np.pi
+
+    #recalculate probabilities
+    mobile_object_COM_candidate_probabilities[0]
+
+    display_COM_candidates(0)
 
 
 p.disconnect()
