@@ -104,8 +104,6 @@ def get_candidate_COMs_and_object_axes(mobile_object_index, number_of_points_axi
     return COM_candidates_locs, (axis_0_object_space, axis_1_object_space), origin_of_axes
 
 
-def get_world_space_point(point, position, orientation):
-    return p_utils.rotate_vector(point, orientation)+position
 
 def display_COM_candidates(mobile_object_index):
     position, orientation = p.getBasePositionAndOrientation(mobile_object_IDs[mobile_object_index])
@@ -114,7 +112,7 @@ def display_COM_candidates(mobile_object_index):
     displayed_shapes_IDs = []
     max_prob = max(mobile_object_COM_candidate_probabilities[mobile_object_index])
     for i,value in enumerate(mobile_object_COM_candidates[mobile_object_index]):
-        loc = get_world_space_point(value, position, orientation)
+        loc = p_utils.get_world_space_point(value, position, orientation)
         point_id = p.createMultiBody(baseVisualShapeIndex=point_visual_shape, basePosition=(loc[0], loc[1], 0.15))
         color_val = mobile_object_COM_candidate_probabilities[mobile_object_index][i]/max_prob
         p.changeVisualShape(point_id, -1, rgbaColor=(color_val,color_val,color_val, 1.))
@@ -133,20 +131,20 @@ def get_pusher_start_and_direction_points(mobile_object_index, axis_index):
     avg_point = np.array([0.,0.])
     for i in np.arange(len(mobile_object_COM_candidates[mobile_object_index])):
         candidate = mobile_object_COM_candidates[mobile_object_index][i]
-        candidate_world_coords = get_world_space_point(candidate, position, orientation)
+        candidate_world_coords = p_utils.get_world_space_point(candidate, position, orientation)
         avg_point += mobile_object_COM_candidate_probabilities[mobile_object_index][i]*candidate_world_coords[:2]
 
     #get start point
     axis_of_start_point = mobile_object_axes[mobile_object_index][axis_index]
     axis_of_start_point_world_space = p_utils.rotate_vector(axis_of_start_point, orientation)[:2]
-    object_origin_world_coords = get_world_space_point(mobile_object_axes_origins[mobile_object_index], position, orientation)[:2]
+    object_origin_world_coords = p_utils.get_world_space_point(mobile_object_axes_origins[mobile_object_index], position, orientation)[:2]
     start_point = object_origin_world_coords + np.dot(avg_point - object_origin_world_coords, axis_of_start_point_world_space) * axis_of_start_point_world_space
 
     return start_point, avg_point
 
 
 def calculate_probability_for_a_single_candidate_COM(mobile_object_index, candidate_COM_index, original_position, original_orientation, pusher_start, pusher_dir, angular_displacement):
-    candidate_COM = get_world_space_point(mobile_object_COM_candidates[mobile_object_index][candidate_COM_index], original_position, original_orientation)
+    candidate_COM = p_utils.get_world_space_point(mobile_object_COM_candidates[mobile_object_index][candidate_COM_index], original_position, original_orientation)
     torque = np.cross(pusher_start-candidate_COM,pusher_dir)[2]
     factor = angular_displacement/torque
     #print(factor)

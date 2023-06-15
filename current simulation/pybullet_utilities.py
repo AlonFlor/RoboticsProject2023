@@ -1,6 +1,7 @@
 import pybullet as p
 import numpy as np
 import os
+import random
 
 import file_handling
 import make_URDF
@@ -221,6 +222,14 @@ def rotate_vector(vec, quat):
     result = quaternion_multiplication(qP, quat_inv)
     return result[:3]
 
+def generate_point(x_range, y_range, z_range):
+    return np.array([random.uniform(x_range[0], x_range[1]), random.uniform(y_range[0], y_range[1]), random.uniform(z_range[0], z_range[1])])
+
+def generate_num(val_range):
+    return random.uniform(val_range[0], val_range[1])
+
+def get_world_space_point(point, position, orientation):
+    return rotate_vector(point, orientation)+position
 
 
 
@@ -319,6 +328,45 @@ def save_scene_no_bin(scene_file, mobile_object_IDs, mobile_object_types, held_f
         data.append([object_type, COM[0], COM[1], COM[2], pose[0], pose[1], pose[2], orientation[0], orientation[1], orientation[2], orientation[3], int(held_fixed)])
     file_handling.write_csv_file(scene_file, "object_type,COM_x,COM_y,COM_z,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", data)
 
+
+
+def get_COM_bounds(object_type, crop_fraction = 0.8):
+    '''find the acceptable geometric bounds for a COM, in object coordinates'''
+    bounding_points = file_handling.read_csv_file(os.path.join("object models",object_type,"precomputed_bounding_points.csv"),[float, float, float])
+    min_x = max_x = bounding_points[0][0]
+    min_y = max_y = bounding_points[0][1]
+    min_z = max_z = bounding_points[0][2]
+    for point in bounding_points:
+        if point[0] < min_x:
+            min_x = point[0]
+        if point[0] > max_x:
+            max_x = point[0]
+        if point[1] < min_y:
+            min_y = point[1]
+        if point[1] > max_y:
+            max_y = point[1]
+        if point[2] < min_z:
+            min_z = point[2]
+        if point[2] > max_z:
+            max_z = point[2]
+
+    com_x_range_center = 0.5*(min_x+max_x)
+    com_y_range_center = 0.5*(min_y+max_y)
+    com_z_range_center = 0.5*(min_z+max_z)
+
+    com_x_range_dist = 0.5*(max_x - min_x)
+    com_y_range_dist = 0.5*(max_y - min_y)
+    com_z_range_dist = 0.5*(max_z - min_z)
+
+    com_new_x_range_dist = crop_fraction*com_x_range_dist
+    com_new_y_range_dist = crop_fraction*com_y_range_dist
+    com_new_z_range_dist = crop_fraction*com_z_range_dist
+
+    com_x_range = (com_x_range_center - com_new_x_range_dist, com_x_range_center + com_new_x_range_dist)
+    com_y_range = (com_y_range_center - com_new_y_range_dist, com_y_range_center + com_new_y_range_dist)
+    com_z_range = (com_z_range_center - com_new_z_range_dist, com_z_range_center + com_new_z_range_dist)
+
+    return com_x_range, com_y_range, com_z_range
 
 
 def add_to_motion_script(id, time_val, motion_script):
