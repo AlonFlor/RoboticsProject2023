@@ -215,6 +215,12 @@ def quaternion_multiplication(q1, q2):
     v_ans = r1*v2 + r2*v1 + np.cross(v1,v2)
     return np.array([v_ans[0], v_ans[1], v_ans[2], r1*r2 - np.dot(v1,v2)])
 
+def quaternion_difference(q1, q2):
+    return quaternion_multiplication(q1, (-q2[0], -q2[1], -q2[2], q2[3]))
+
+def quaternion_angular_magitude(q):
+    return 2.*np.arctan2(np.linalg.norm(np.array(q)[:3]), q[3])
+
 def rotate_vector(vec, quat):
     quat_inv = (-quat[0],-quat[1],-quat[2],quat[3])
     vec_as_quat = (vec[0], vec[1], vec[2], 0.)

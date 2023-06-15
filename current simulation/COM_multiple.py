@@ -1,15 +1,16 @@
 import pybullet as p
-
 import file_handling
 import pybullet_utilities as p_utils
 import os
 import numpy as np
+import time
 
 
-#physicsClient = p.connect(p.DIRECT)
-physicsClient = p.connect(p.GUI)
+physicsClient = p.connect(p.DIRECT)
+#physicsClient = p.connect(p.GUI)
 p.setGravity(0, 0, -9.8)
 dt = 1./240.
+
 
 # make directory for simulation files
 testNum = 1
@@ -73,9 +74,16 @@ number_of_objects = 4
 ground_truth_scene_loc = os.path.join(ground_truth_folder, "scene.csv")
 file_handling.copy_file(original_scene_loc, ground_truth_scene_loc)
 
+#get the ground truth COMs
+ground_truth_COMs = []
+original_scene_data = file_handling.read_csv_file(original_scene_loc, [str, float, float, float, float, float, float, float, float, float, float, int])
+for object_data in original_scene_data:
+    ground_truth_COMs.append(np.array(object_data[1:4]))
+ground_truth_COMs = np.array(ground_truth_COMs)
 
 
-
+sim_start = time.perf_counter_ns()
+number_of_simulations = 5
 
 #run the ground truth simulation
 ground_truth_movement_data = run_attempt(ground_truth_folder, point_1, point_2)
@@ -85,24 +93,78 @@ ground_truth_movement_data = run_attempt(ground_truth_folder, point_1, point_2)
 com_x_range, com_y_range, com_z_range = p_utils.get_COM_bounds("cracker_box")
 
 #generate and run scenes with alternate COMs
-alternate_com_movement_data = []
-for i in np.arange(5):
+scene_paths = []
+scene_COMs = []
+scene_errors = []
+for i in np.arange(number_of_simulations):
     # make directory for one attempt with alternate COMs
     attempt_dir_path = os.path.join(test_dir,"try_" + str(i).zfill(4))
     os.mkdir(attempt_dir_path)
+    scene_paths.append(attempt_dir_path)
 
-    #create scene file
+    #generate random centers of mass and create scene file
     new_COM_list = []
     for i in np.arange(number_of_objects):
         new_COM_list.append(p_utils.generate_point(com_x_range, com_y_range, com_z_range))
+    scene_COMs.append(new_COM_list)
     p_utils.save_scene_with_shifted_COMs(original_scene_loc, os.path.join(attempt_dir_path,"scene.csv"), new_COM_list)
 
+    #run the scene
     this_scene_movement_data = run_attempt(attempt_dir_path, point_1, point_2)
-    alternate_com_movement_data.append(this_scene_movement_data)
 
-print(ground_truth_movement_data)
-for alternate_com_movement_data_one_scene in alternate_com_movement_data:
-    print(alternate_com_movement_data_one_scene)
+    #calculate error of generated scene vs ground truth
+    spatial_diffs = 0.
+    angular_diffs = 0.
+    for i in np.arange(number_of_objects):
+        position_gt = np.array(ground_truth_movement_data[i][:3])
+        position_scene = np.array(this_scene_movement_data[i][:3])
+        spatial_diffs += np.linalg.norm(position_gt - position_scene)
+
+        orientation_gt = ground_truth_movement_data[i][-4:]
+        orientation_scene = this_scene_movement_data[i][-4:]
+        q_diff = p_utils.quaternion_difference(orientation_gt,orientation_scene)
+        q_diff /= np.linalg.norm(q_diff)
+        ang_magn = p_utils.quaternion_angular_magitude(q_diff)
+        if ang_magn < 0:
+            print(ang_magn)
+            exit()
+        angular_diffs += min(ang_magn, 2 * np.pi - ang_magn)
+
+    scene_error = 10*spatial_diffs + angular_diffs      #spatial diffs are order of ~0.1 m , angular diffs are order of ~1 rad. Want roughly equal numerical contribution.
+    scene_errors.append(scene_error)
+
+print('Time to run simulations:', (time.perf_counter_ns() - sim_start) / 1e9, 's')
+
+#Get probability score for each scene. Pre-normalization probability score = (total error) - (scene error)
+scene_probability_scores = []
+total_error_all_scenes = 0.
+for error_score in scene_errors:
+    total_error_all_scenes += error_score
+for error_score in scene_errors:
+    scene_probability_scores.append((total_error_all_scenes - error_score))
+#normalize probability scores
+prob_magn = 0.
+for probability_score in scene_probability_scores:
+    prob_magn += probability_score
+for i in np.arange(number_of_simulations):
+    scene_probability_scores[i] /= prob_magn
+
+
+
+#get estimated COM by averaging the attempted COMs using their probability scores
+COM_estimates = np.array([np.array([0., 0., 0.])] * number_of_objects)
+for i in np.arange(number_of_simulations):
+    scene_probability = scene_probability_scores[i]
+    scene_COM_list = scene_COMs[i]
+    for j in np.arange(number_of_objects):
+        object_COM_estimate = np.array(scene_COM_list[j])
+        COM_estimates[j] += scene_probability*object_COM_estimate
+
+print(np.abs((ground_truth_COMs - COM_estimates) / ground_truth_COMs))
+
+#TODO: maybe consider finding a way to refine the search for the correct COMs using the incorrect COMs.
+#   This might end up turning this into a differential physics thing, where we differentiate the error or probability by the COM location.
+#   Doing so would require moving from PyBullet to a differentiable simulator. Maybe consider doing that anyway?
 
 p.disconnect()
 
