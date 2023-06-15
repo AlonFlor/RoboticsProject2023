@@ -37,18 +37,16 @@ p_utils.open_saved_scene(os.path.join("scenes","scene_COM_overlay_one_object.csv
 
 def get_candidate_COMs_and_object_axes(mobile_object_index, number_of_points_axis_0, number_of_points_axis_1):
     bounding_points = file_handling.read_csv_file(os.path.join("object models",mobile_object_types[mobile_object_index],"precomputed_bounding_points.csv"),[float, float, float])
-    print(bounding_points)
     COM_ground_truth = np.array(p.getDynamicsInfo(mobile_object_IDs[mobile_object_index],-1)[3])
     position, orientation = p.getBasePositionAndOrientation(mobile_object_IDs[mobile_object_index])
     position = np.array(position)
     orientation = np.array(orientation)
 
-    bounding_points_transformed = []
+    bounding_points_world_coords = []
     for point in bounding_points:
         point_array = np.array(point)
         new_point = p_utils.rotate_vector(point_array - COM_ground_truth, orientation) + position
-        bounding_points_transformed.append(new_point)
-    print(bounding_points_transformed)
+        bounding_points_world_coords.append(new_point)
 
     #get xy plane
     #need bounding points corresponding to xy plane
@@ -56,33 +54,33 @@ def get_candidate_COMs_and_object_axes(mobile_object_index, number_of_points_axi
     #that pair has one point that needs to be removed, it is the one father away on the z-axis from the two points not in the pair
     min_dist = 100.
     pair = (0,1)
-    for i in np.arange(len(bounding_points_transformed)):
-        for j in np.arange(i+1,len(bounding_points_transformed)):
-            dist = np.linalg.norm(bounding_points_transformed[i][:2] - bounding_points_transformed[j][:2])
+    for i in np.arange(len(bounding_points_world_coords)):
+        for j in np.arange(i+1, len(bounding_points_world_coords)):
+            dist = np.linalg.norm(bounding_points_world_coords[i][:2] - bounding_points_world_coords[j][:2])
             if min_dist > dist:
                 min_dist = dist
                 pair = (i,j)
     dists_first = 0.
     dists_second = 0.
     point_to_eliminate_index = 0
-    for i in np.arange(len(bounding_points_transformed)):
+    for i in np.arange(len(bounding_points_world_coords)):
         if i in pair:
             continue
-        dists_first+= np.abs(bounding_points_transformed[i][2] - bounding_points_transformed[pair[0]][2])
-        dists_second+= np.abs(bounding_points_transformed[i][2] - bounding_points_transformed[pair[1]][2])
+        dists_first+= np.abs(bounding_points_world_coords[i][2] - bounding_points_world_coords[pair[0]][2])
+        dists_second+= np.abs(bounding_points_world_coords[i][2] - bounding_points_world_coords[pair[1]][2])
     if dists_first > dists_second:
         point_to_eliminate_index = pair[0]
     else:
         point_to_eliminate_index = pair[1]
-    bounding_points_transformed.pop(point_to_eliminate_index)
+    bounding_points_world_coords.pop(point_to_eliminate_index)
 
     #once a bounding plane has been defined, then need to create array of points corresponding to potential COMs. Points are defined relative to object
     axis_0_raw_values = np.linspace(0., 1., number_of_points_axis_0+2)[1:-1]
     axis_1_raw_values = np.linspace(0., 1., number_of_points_axis_1+2)[1:-1]
-    axis_0_values = np.array([bounding_points_transformed[0]*value + bounding_points_transformed[1]*(1.-value) for value in axis_0_raw_values])
-    axis_1_values = np.array([bounding_points_transformed[0]*value + bounding_points_transformed[2]*(1.-value) for value in axis_1_raw_values])
+    axis_0_values = np.array([bounding_points_world_coords[0] * value + bounding_points_world_coords[1] * (1. - value) for value in axis_0_raw_values])
+    axis_1_values = np.array([bounding_points_world_coords[0] * value + bounding_points_world_coords[2] * (1. - value) for value in axis_1_raw_values])
 
-    plane_origin = bounding_points_transformed[0]
+    plane_origin = bounding_points_world_coords[0]
 
     #get the COM candidate locs in object space
     COM_candidates_locs = []
@@ -94,8 +92,8 @@ def get_candidate_COMs_and_object_axes(mobile_object_index, number_of_points_axi
             COM_candidates_locs.append(loc_object_space)
 
     #get the object's axes in object space
-    axis_0 = bounding_points_transformed[1] - bounding_points_transformed[0]
-    axis_1 = bounding_points_transformed[2] - bounding_points_transformed[0]
+    axis_0 = bounding_points_world_coords[1] - bounding_points_world_coords[0]
+    axis_1 = bounding_points_world_coords[2] - bounding_points_world_coords[0]
     axis_0 = axis_0 / np.linalg.norm(axis_0)
     axis_1 = axis_1 / np.linalg.norm(axis_1)
     axis_0_object_space = p_utils.rotate_vector(axis_0, orientation_opposite)
@@ -114,10 +112,12 @@ def display_COM_candidates(mobile_object_index):
     position = np.array(position)
     orientation = np.array(orientation)
     displayed_shapes_IDs = []
-    for value in mobile_object_COM_candidates[mobile_object_index]:
+    max_prob = max(mobile_object_COM_candidate_probabilities[mobile_object_index])
+    for i,value in enumerate(mobile_object_COM_candidates[mobile_object_index]):
         loc = get_world_space_point(value, position, orientation)
         point_id = p.createMultiBody(baseVisualShapeIndex=point_visual_shape, basePosition=(loc[0], loc[1], 0.15))
-        #TODO add recoloring for different probabilities here
+        color_val = mobile_object_COM_candidate_probabilities[mobile_object_index][i]/max_prob
+        p.changeVisualShape(point_id, -1, rgbaColor=(color_val,color_val,color_val, 1.))
         displayed_shapes_IDs.append(point_id)
     for point_id in displayed_shapes_IDs:
         p.removeBody(point_id)
@@ -148,7 +148,12 @@ def get_pusher_start_and_direction_points(mobile_object_index, axis_index):
 def calculate_probability_for_a_single_candidate_COM(mobile_object_index, candidate_COM_index, original_position, original_orientation, pusher_start, pusher_dir, angular_displacement):
     candidate_COM = get_world_space_point(mobile_object_COM_candidates[mobile_object_index][candidate_COM_index], original_position, original_orientation)
     torque = np.cross(pusher_start-candidate_COM,pusher_dir)[2]
-    
+    factor = angular_displacement/torque
+    #print(factor)
+    if factor <= 0:
+        return 0.
+    return 1.#factor
+
 
 #initialize COM candidates and COM axes
 for i in np.arange(len(mobile_object_IDs)):
@@ -170,13 +175,18 @@ new_angle = p.getEulerFromQuaternion(p.getBasePositionAndOrientation(mobile_obje
 for round_index in range(5):
     old_angle = new_angle + 0.
 
+    orig_position, orig_orientation = p.getBasePositionAndOrientation(mobile_object_IDs[0])
+    orig_position = np.array(orig_position)
+    orig_orientation = np.array(orig_orientation)
+
     #figure out where to push next
     point_1, point_2 = get_pusher_start_and_direction_points(0, round_index%2)
     point_1 = np.array([point_1[0],point_1[1],0.]) + cylinder_height_offset
     point_2 = np.array([point_2[0],point_2[1],0.]) + cylinder_height_offset
 
     direction = point_2 - point_1
-    point_2 = push_distance * direction / np.linalg.norm(direction) + point_1
+    direction_normalized = direction / np.linalg.norm(direction)
+    point_2 = push_distance * direction_normalized + point_1
 
     #push
     p.resetBasePositionAndOrientation(cylinderID, point_1, (0., 0., 0., 1.))
@@ -191,8 +201,26 @@ for round_index in range(5):
     elif angular_displacement > 3 * np.pi / 4:
         angular_displacement -= 2 * np.pi
 
+    print("angular_displacement",angular_displacement)
+
     #recalculate probabilities
-    mobile_object_COM_candidate_probabilities[0]
+    prob_sum = 0.
+    for candidate_COM_index in np.arange(len(mobile_object_COM_candidate_probabilities[0])):
+        if mobile_object_COM_candidate_probabilities[0][candidate_COM_index] > 0:
+            mobile_object_COM_candidate_probabilities[0][candidate_COM_index] = \
+                calculate_probability_for_a_single_candidate_COM(0, candidate_COM_index, orig_position, orig_orientation, point_1, direction_normalized, angular_displacement)
+            prob_sum += mobile_object_COM_candidate_probabilities[0][candidate_COM_index]
+
+    for candidate_COM_index in np.arange(len(mobile_object_COM_candidate_probabilities[0])):
+        mobile_object_COM_candidate_probabilities[0][candidate_COM_index] /= prob_sum #normalize
+
+    #write down the centers of mass
+    COM_ground_truth = np.array(p.getDynamicsInfo(mobile_object_IDs[0], -1)[3])
+    COM_estimate = np.array([0., 0., 0.])
+    for candidate_COM_index in np.arange(len(mobile_object_COM_candidate_probabilities[0])):
+        COM_estimate += mobile_object_COM_candidate_probabilities[0][candidate_COM_index] * mobile_object_COM_candidates[0][candidate_COM_index]
+    print("COM_ground_truth object coords",COM_ground_truth)
+    print("COM estimated object coords -",COM_estimate)
 
     display_COM_candidates(0)
 
