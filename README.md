@@ -2,7 +2,7 @@
 
 ## Current simulations folder
 
-Some files are utilities folder that do not run simulations on their own. Other files are the main programs.
+Some files are utilities that do not run simulations on their own. Other files are the main programs.
 
 The main programs in the current simulation folder can be split into three categories:
 
@@ -16,7 +16,7 @@ All of them involve a cylindrical pusher that executes quasi-static pushes on va
 
 - scenario_with_MCTS.py
 
-scenario_with_MCTS.py runs a motion planner using Monte Carlo Tree Search to find an efficient series of pushes to declutter a scene, such that at the end the robot can grasp a target object.
+scenario_with_MCTS.py runs a motion planner using Monte Carlo Tree Search to find an efficient series of pushes to declutter a 3D scene, such that at the end the robot can grasp a target object in a bin.
 
 
 ### COM projects
