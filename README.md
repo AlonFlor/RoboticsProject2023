@@ -4,27 +4,47 @@
 
 Some files are utilities folder that do not run simulations on their own. Other files are the main programs.
 
-The main programs in the current simulation folder are
+The main programs in the current simulation folder can be split into three categories:
 
-- quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py
-- process_robot_lab_data.py
-- YCB_push_several_COMs.py
-- YCB_push_several_masses.py
-- YCB_several_pushes.py
-- YCB_bin1.py
-- YCB_bin_scene_generate.py
-- YCB_bin_scene_load.py
-- scenario_with_MCTS.py
+- Monte Carlo Tree Search (MCTS) projects
+- Center of mass (COM) projects
+- other projects (either small prototypes or helper files that are not attached to an actual project yet)
 
 All of them involve a cylindrical pusher that executes quasi-static pushes on various rigid body objects.
 
+### MCTS projects
+
+- scenario_with_MCTS.py
+
 scenario_with_MCTS.py runs a motion planner using Monte Carlo Tree Search to find an efficient series of pushes to declutter a scene, such that at the end the robot can grasp a target object.
 
-quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py takes the text files from the object models folder and expands them into rigid body objects consisting of cubes linked together by fixed joints. Initially, all cubes are candidates for the location of the object's center of mass. At each loop, the simulation takes the region of candidate cubes and plots a pushing course that splits the region in half. The pusher then pushes the object along the course. Based on the object's direction, the center of mass cannot be in one of the halves, so the cubes in the ineligible half are remved from the candidate list. This is repeated until there is one cube remaining, its center is the simulation's candidate center of mass. The estimated center of mass is then compared to the ground truth center of mass. Results show good agreement between those two values for the simulated objects. The idea of using rotations and pushing courses to eliminate candidate regions and isolate the center of mass is based on Mason's voting theorem, but this version uses only the push direction, without taking the friction cone into account.
 
-process_robot_lab_data.py takes data from the real life robot, which consists of end effector coordinates, forces (so far unused), and two poses of an object. The poses are before and after a push, while the end effector coordinates were recorded before, during, and after the same push. The frame-by-frame object poses are interpolated and displayed, while the robot end effector is simulated by the cylindrical pusher. This work is incomplete, since the start time of the object pose is calculated by taking the minimum pusher z-coordinate (height), and the end effector coordinates are of the robot arm's hand rather than its finger.
+### COM projects
 
-YCB_push_several_COMs.py and YCB_push_several_masses.py both deal with the effects of a YCB object's inertial properties on its motion. Both take several copies of a YCB object, remove collision detection between those copies, and set them to be superimposed on each other. Each copy has a varying value of an inertial property: center of mass for the former simulation and total mass for the latter simulation. The pusher pushes all copies simulataneously, allowing the user to see how variation in a property affects the motion. So far, results indicate that the center of mass affects the motion of an object undergoing quasi-static pushing, but total mass has no effect. 
+- quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py
+- COM_overlay.py
+- COM_multiple.py
+- YCB_push_several_COMs.py
+- YCB_push_several_masses.py
+
+quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py takes the text files from the object models folder and expands them into rigid body objects consisting of cubes linked together by fixed joints. Initially, all cubes are candidates for the location of the object's center of mass. At each loop, the simulation takes the region of candidate cubes and plots a pushing course that splits the region in half. The pusher then pushes the object along the course. Based on the object's direction, the center of mass cannot be in one of the halves, so the cubes in the ineligible half are removed from the candidate list. This is repeated until there is one cube remaining, its center is the simulation's candidate center of mass. The estimated center of mass is then compared to the ground truth center of mass. Results show good agreement between those two values for the simulated objects. The idea of using rotations and pushing courses to eliminate candidate regions and isolate the center of mass is based on Mason's voting theorem, but this version uses only the push direction, without taking the friction cone into account.
+
+COM_overlay.py runs the same scenario as quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py, but on YCB objects instead of cubes. Different points along the object are selected to be candidate COM points, and the probability of each one being the center of mass changes as some are eliminated in each push.
+
+COM_multiple.py searches for the centers of mass of multiple objects that are pushed all at once. Its approach is similar to that of a particle filter: many scenarios are generated, in each one each object has the same starting position but a different randomly generated center of mass. In all scenarios, the objects are pushed in the same way. The final poses of the objects in a scenario are compared with the final poses of the objects in the ground truth simulation, and the scenario is given an accuracy score. Centers of mass are weighted according to their accuracy score to guide a search for more accurate centers of mass.
+
+YCB_push_several_COMs.py and YCB_push_several_masses.py are both files written earlier to test the effects of a YCB object's inertial properties on its motion. Both take several copies of a YCB object, remove collision detection between those copies, and set them to be superimposed on each other. Each copy has a varying value of an inertial property: center of mass for the former simulation and total mass for the latter simulation. The pusher pushes all copies simulataneously, allowing the user to see how variation in a property affects the motion. So far, results indicate that the center of mass affects the motion of an object undergoing quasi-static pushing, but total mass has no effect.
+
+
+### other projects
+- process_robot_lab_data.py
+- YCB_several_pushes.py
+- YCB_bin1.py
+- YCB_bin_scene_generate.py
+- YCB_scene_generate.py
+- YCB_bin_scene_load.py
+
+process_robot_lab_data.py is an unattached helper file. It takes data from the real life robot, which consists of end effector coordinates, forces (so far unused), and two poses of an object. The poses are before and after a push, while the end effector coordinates were recorded before, during, and after the same push. The frame-by-frame object poses are interpolated and displayed, while the robot end effector is simulated by the cylindrical pusher. This work is incomplete, since the start time of the object pose is calculated by taking the minimum pusher z-coordinate (height), and the end effector coordinates are of the robot arm's hand rather than its finger.
 
 YCB_several_pushes.py pushes a single YCB object in a different location in each push for several pushes, to see how the object reacts and to allow the user to see the center of mass. The simulation is reset between pushes.
 
@@ -32,7 +52,9 @@ YCB_bin1.py is a test simulation with several YCB objects.
 
 YCB_bin_scene_generate.py generates a scene csv file, listing the starting objects, their centers of mass, their poses (position and orientation), and whether or not they are held fixed.
 
-YCB_bin_scene_load.py opens up a saved scene via its csv file. This will be the basis of the MCTS state transition simulator, which needs to load up saved states.
+YCB_scene_generate.py generates a scene csv file without a fixed bin object.
+
+YCB_bin_scene_load.py opens up a saved scene via its csv file.
 
 
 
