@@ -241,11 +241,11 @@ pusherID = None
 dt = 1./240.
 object_scale = 0.015
 startPos = (0., 0., 1.*object_scale)
-startOrientation = p.getQuaternionFromEuler([np.pi / 2, 0, 0])#p.getQuaternionFromEuler([np.pi / 2, 0, np.pi / 2])
+startOrientation = p.getQuaternionFromEuler([0, 0, 0])
 num_links = None
 
 object_original_main_axis = np.array([-1., 0., 0.])
-object_original_second_axis = np.array([0., 0., 1.])
+object_original_second_axis = np.array([0., 1., 0.])
 
 
 def run_full_test(object_name):
