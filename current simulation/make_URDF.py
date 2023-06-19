@@ -76,7 +76,7 @@ def write_URDF_from_text_file(object_name, destination_folder):
     file_handling.write_urdf(destination_folder, object_name, urdf_str)
 
 
-def write_URDF_with_external_mass_and_friction_info(object_name, object_data, mass_data, friction_data, destination_folder):
+def write_URDF_with_external_mass_and_friction_info(object_name, extra_designation, object_data, mass_data, friction_data, destination_folder):
     urdf_str = "<robot name = \"" + object_name + "\">\n"
 
     indent = 1
@@ -90,7 +90,7 @@ def write_URDF_with_external_mass_and_friction_info(object_name, object_data, ma
 
     #print(urdf_str)
 
-    file_handling.write_urdf(destination_folder, object_name, urdf_str)
+    file_handling.write_urdf(destination_folder, object_name+extra_designation, urdf_str)
 
 
 

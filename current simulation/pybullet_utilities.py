@@ -336,6 +336,85 @@ def save_scene_no_bin(scene_file, mobile_object_IDs, mobile_object_types, held_f
 
 
 
+
+
+
+def save_scene_blocks_no_bin(scene_file, mobile_object_IDs, mobile_object_types, held_fixed_list):
+    data = []
+    for i in np.arange(len(mobile_object_IDs)):
+        ID = mobile_object_IDs[i]
+        object_type = mobile_object_types[i]
+        held_fixed = held_fixed_list[i]
+        pose,orientation = p.getBasePositionAndOrientation(ID)
+        data.append([object_type, pose[0], pose[1], pose[2], orientation[0], orientation[1], orientation[2], orientation[3], int(held_fixed)])
+    file_handling.write_csv_file(scene_file, "object_type,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed", data)
+
+
+def get_block_object_type_info(object_type):
+    obj_data = file_handling.read_combined_boxes_extra_info_rigid_body_file("object models\\" + object_type + ".txt")
+    obj_data_to_return = []
+    default_masses = []
+    default_frictions = []
+    for i in np.arange(len(obj_data)):
+        #my object files have pre-set per-block mass and friction values. Get rid of these
+        default_frictions.append(obj_data[i][-1])
+        default_masses.append(obj_data[i][-1])
+        obj_data_to_return.append(list(obj_data[i])[:-2])
+    print(obj_data_to_return)
+    return obj_data_to_return, default_masses, default_frictions
+
+
+def open_saved_block_scene(scene_file, test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list, object_scale):
+    scene_data = file_handling.read_csv_file(scene_file, [str, float, float, float, float, float, float, float, int])
+
+    # load plane
+    planeID, plane_shapes_entry = load_object("plane", test_dir, useFixedBase=True)
+    if motion_script is not None:
+        shapes_list.append(plane_shapes_entry)
+        motion_script.append([])
+        add_to_motion_script(planeID, 0., motion_script)
+
+    binID = None
+
+    object_type_counts = {}
+    for object_type,x,y,z,orient_x,orient_y,orient_z,orient_w,held_fixed in scene_data:
+        if object_type=="bin":
+            bin_scale = (0.5, 0.5, 0.5)
+            bin_collision_ID = p.createCollisionShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
+            bin_visual_shapeID = p.createVisualShape(p.GEOM_MESH, meshScale=bin_scale, fileName=os.path.join("object models", "bin", "bin.obj"))
+            bin_mass = 1.-held_fixed
+            binID = p.createMultiBody(bin_mass, bin_collision_ID, bin_visual_shapeID, (x, y, z * bin_scale[2]), (orient_x,orient_y,orient_z,orient_w))
+            if motion_script is not None:
+                motion_script.append([])
+                add_to_motion_script(binID, 0., motion_script)
+                shapes_list.append(["bin", [0.0, 0.0, 0.0]])
+        else:
+            #udpate object counts
+            if object_type not in object_type_counts.keys():
+                object_type_counts[object_type] = 1
+            else:
+                object_type_counts[object_type] +=1
+
+            held_fixed_bool = bool(held_fixed)
+
+            #load object
+            objectID = p.loadURDF(os.path.join("object models",object_type+".urdf"), globalScaling=object_scale)
+            p.resetBasePositionAndOrientation(objectID, (x, y, z), (orient_x,orient_y,orient_z,orient_w))
+
+            #add to lists
+            if motion_script is not None:
+                shapes_list.append(object_type)
+                motion_script.append([])
+            mobile_object_IDs.append(objectID)
+            mobile_object_types.append(object_type)
+            held_fixed_list.append(held_fixed_bool)
+
+    return binID
+
+
+
+
+
 def get_COM_bounds(object_type, crop_fraction = 0.8):
     '''find the acceptable geometric bounds for a COM, in object coordinates'''
     bounding_points = file_handling.read_csv_file(os.path.join("object models",object_type,"precomputed_bounding_points.csv"),[float, float, float])
