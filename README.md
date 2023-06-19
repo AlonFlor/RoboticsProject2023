@@ -24,6 +24,7 @@ scenario_with_MCTS.py runs a motion planner using Monte Carlo Tree Search to fin
 - quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py
 - COM_overlay.py
 - COM_multiple.py
+- blocks_rigid_bodies_differentiable.py
 - YCB_push_several_COMs.py
 - YCB_push_several_masses.py
 
@@ -32,6 +33,8 @@ quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py takes the text fil
 COM_overlay.py runs the same scenario as quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py, but on YCB objects instead of cubes. Different points along the object are selected to be candidate COM points, and the probability of each one being the center of mass changes as some are eliminated in each push.
 
 COM_multiple.py searches for the centers of mass of multiple objects that are pushed all at once. Its approach is similar to that of a particle filter: many scenarios are generated, in each one each object has the same starting position but a different randomly generated center of mass. In all scenarios, the objects are pushed in the same way. The final poses of the objects in a scenario are compared with the final poses of the objects in the ground truth simulation, and the scenario is given an accuracy score. Centers of mass are weighted according to their accuracy score to guide a search for more accurate centers of mass.
+
+blocks_rigid_bodies_differentiable.py uses block objects, like quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py. It pushes objects made up of blocks, each time in the same way. It finds the masses and frictions of the blocks such that the objects they make up have a motion matching the ground truth push. The center of mass is the weighted average the block locations, weighted by mass.
 
 YCB_push_several_COMs.py and YCB_push_several_masses.py are both files written earlier to test the effects of a YCB object's inertial properties on its motion. Both take several copies of a YCB object, remove collision detection between those copies, and set them to be superimposed on each other. Each copy has a varying value of an inertial property: center of mass for the former simulation and total mass for the latter simulation. The pusher pushes all copies simulataneously, allowing the user to see how variation in a property affects the motion. So far, results indicate that the center of mass affects the motion of an object undergoing quasi-static pushing, but total mass has no effect.
 
