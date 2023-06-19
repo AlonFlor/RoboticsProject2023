@@ -119,15 +119,6 @@ def create_cylinder(radius, height):
     return p.createMultiBody(1., cylinder_shapeID, cylinder_visual_shapeID, (0., 0., 0.5), (0., 0., 0., 1.))
 
 
-def save_data_one_frame(time_val, fps, mobile_object_IDs, image_num, view_matrix, proj_matrix, imgs_dir, motion_script=None):
-    if (time_val * fps - int(time_val * fps) < 0.0001):
-        if motion_script is not None:
-            for ID in mobile_object_IDs:
-                add_to_motion_script(ID, time_val, motion_script)
-
-        print_image(view_matrix, proj_matrix, imgs_dir, image_num)
-        image_num += 1
-    return image_num
 
 
 
@@ -142,7 +133,12 @@ def push(pusher_end, pusherID, dt, mobile_object_IDs=None, fps=None, view_matrix
     while np.linalg.norm(np.array(pusher_position) - pusher_end) > 0.01:
         time_val = count * dt
         if saving_data:
-            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, image_num, view_matrix, proj_matrix, imgs_dir, motion_script)
+            if motion_script is not None:
+                add_step_to_motion_script(time_val, motion_script)
+            if (time_val * fps - int(time_val * fps) < 0.0001):
+                if image_num is not None:
+                    print_image(view_matrix, proj_matrix, imgs_dir, image_num)
+                    image_num += 1
 
         if time_val > time_out:
             break #pusher timed out
@@ -189,7 +185,12 @@ def let_time_pass(pusherID, dt, mobile_object_IDs, fps=None, view_matrix=None, p
     while velocities_sum>0.001:
         time_val = count * dt
         if saving_data:
-            image_num = save_data_one_frame(time_val, fps, mobile_object_IDs, image_num, view_matrix, proj_matrix, imgs_dir, motion_script)
+            if motion_script is not None:
+                add_step_to_motion_script(time_val, motion_script)
+            if (time_val * fps - int(time_val * fps) < 0.0001):
+                if image_num is not None:
+                    print_image(view_matrix, proj_matrix, imgs_dir, image_num)
+                    image_num += 1
         count += 1
 
         p.stepSimulation()
@@ -457,6 +458,11 @@ def get_COM_bounds(object_type, crop_fraction = 0.8):
 def add_to_motion_script(id, time_val, motion_script):
     position, orientation = p.getBasePositionAndOrientation(id)
     motion_script[id].append([time_val,position[0],position[1],position[2],orientation[0],orientation[1],orientation[2],orientation[3]])
+
+def add_step_to_motion_script(time_val, motion_script):
+    for id in motion_script.keys():
+        position, orientation = p.getBasePositionAndOrientation(id)
+        motion_script[id].append([time_val,position[0],position[1],position[2],orientation[0],orientation[1],orientation[2],orientation[3]])
 
 
 def PLY_header_str(num_points):
