@@ -61,6 +61,19 @@ def plot_variables(var1, var1_name, var2, var2_name, title_preamble="", line_dat
         plt.show()
     plt.close("all")
 
+
+def plot_variables_plain(var1, var1_name, var2, var2_name, title_preamble="", out_dir=None, show=False):
+    title = title_preamble + var1_name + " vs "+ var2_name
+    plt.title(title)
+    plt.xlabel(var1_name)
+    plt.ylabel(var2_name)
+    plt.plot(var1,var2, 'b-')
+    if out_dir is not None:
+        plt.savefig(os.path.join(out_dir, title))
+    if show:
+        plt.show()
+    plt.close("all")
+
 #plot_data([1,2,3,4], [1,4,9,16], [1,2,6,24])
 
 #no overloading? These definitions are overriding each other? I do not like that.
