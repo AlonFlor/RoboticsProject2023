@@ -24,6 +24,7 @@ scenario_with_MCTS.py runs a motion planner using Monte Carlo Tree Search to fin
 - quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py
 - COM_overlay.py
 - COM_multiple.py
+- COM_multiple_2.py
 - blocks_rigid_bodies_differentiable.py
 - YCB_push_several_COMs.py
 - YCB_push_several_masses.py
@@ -33,6 +34,8 @@ quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py takes the text fil
 COM_overlay.py runs the same scenario as quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py, but on YCB objects instead of cubes. Different points along the object are selected to be candidate COM points, and the probability of each one being the center of mass changes as some are eliminated in each push.
 
 COM_multiple.py searches for the centers of mass of multiple objects that are pushed all at once. Its approach is similar to that of a particle filter: many scenarios are generated, in each one each object has the same starting position but a different randomly generated center of mass. In all scenarios, the objects are pushed in the same way. The final poses of the objects in a scenario are compared with the final poses of the objects in the ground truth simulation, and the scenario is given an accuracy score. Centers of mass are weighted according to their accuracy score to guide a search for more accurate centers of mass.
+
+COM_multiple_2.py takes a more systematic approach to searching for the centers of masss of a group of objects. Given a scene and a ground truth simulation, it starts with a guess for the center of mass of each of the objects. It then does a simulation, after which it has the poses of the objects before starting, after the ground truth simulation, and after the new simulation. It generates test points around the COM, and checks the amount they moved in the ground truth vs the amount they moved in the new simulation. Points that moved more than expected have too little mass, they attract the COM. Points that moved less than expected have too much mass, they repel the COM. Using the test points' data, a new COM is calculated. A new simulation can then be taken, which allows repeating the cycle. The COM is iteratively improved until a maximum number of iterations is reached, or some error value goes below threshold.
 
 blocks_rigid_bodies_differentiable.py uses block objects, like quasistatic_quasi-mason_simplified_rigid_body_pybullet_sim.py. It pushes objects made up of blocks, each time in the same way. It finds the masses and frictions of the blocks such that the objects they make up have a motion matching the ground truth push. The center of mass is the weighted average the block locations, weighted by mass.
 
