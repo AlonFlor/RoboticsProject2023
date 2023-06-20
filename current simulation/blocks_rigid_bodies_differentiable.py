@@ -222,5 +222,4 @@ def run_algorithm(scene_file, attempt_folder, point_1, point_2):
 
 
 
-
 run_algorithm(os.path.join("scenes","block_planar_scenes","scene_1.csv"), test_dir, point_1, point_2)

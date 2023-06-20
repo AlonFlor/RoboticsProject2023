@@ -83,7 +83,7 @@ ground_truth_COMs = np.array(ground_truth_COMs)
 
 
 sim_start = time.perf_counter_ns()
-number_of_simulations = 50
+number_of_simulations = 5
 
 #run the ground truth simulation
 ground_truth_movement_data = run_attempt(ground_truth_folder, point_1, point_2)
