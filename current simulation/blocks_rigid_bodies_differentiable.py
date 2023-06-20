@@ -149,6 +149,7 @@ def run_algorithm(scene_file, attempt_folder, point_1, point_2):
 
     #TODO: Mention to professors that the interpolation assumption is even more dubious for multiple objects,
     #   due to objects further away being motionless until touched. Since time of touch is unknown, those further-away objects would start moving at t=0.
+    #   Actually, there might be a way around it, by keeping track of contacts. Objects only start to move if needed.
 
     #reset positions and orientations to starting locations
     for object_ID in gt_motion_script.keys():

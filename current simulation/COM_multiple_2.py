@@ -47,6 +47,7 @@ COM_movement_amount = 0.01
 
 #define scene, number of objects in that scene, and number of iterations
 original_scene_loc = os.path.join("scenes","scene_boxes_with_different_COMs.csv")
+#original_scene_loc = os.path.join("scenes","scene_COM_overlay_one_object.csv")
 number_of_objects = 4
 number_of_iterations = 50
 
@@ -59,6 +60,24 @@ file_handling.copy_file(original_scene_loc, ground_truth_scene_loc)
 
 
 
+def get_loss(data_sim, data_gt):
+    '''Calculate the loss as the sum of distances between simulated and ground truth for three test points (x,y,z) for each object.'''
+    loss = 0.
+    for i in np.arange(number_of_objects):
+        pos, orn = data_sim[i]
+        pos_gt, orn_gt = data_gt[i]
+
+        test_point_1 = p_utils.get_world_space_point(np.array([0.01,0.,0.]), pos, orn)
+        test_point_1_gt = p_utils.get_world_space_point(np.array([0.01,0.,0.]), pos_gt, orn_gt)
+        loss += np.linalg.norm(test_point_1-test_point_1_gt)
+        test_point_2 = p_utils.get_world_space_point(np.array([0.,0.01,0.]), pos, orn)
+        test_point_2_gt = p_utils.get_world_space_point(np.array([0.,0.01,0.]), pos_gt, orn_gt)
+        loss += np.linalg.norm(test_point_2-test_point_2_gt)
+        test_point_3 = p_utils.get_world_space_point(np.array([0.,0.,0.01]), pos, orn)
+        test_point_3_gt = p_utils.get_world_space_point(np.array([0.,0.,0.01]), pos_gt, orn_gt)
+        loss += np.linalg.norm(test_point_3-test_point_3_gt)
+
+    return loss
 
 
 def get_objects_positions_and_orientations(mobile_object_IDs):
@@ -133,13 +152,14 @@ for i in np.arange(number_of_objects):
     new_COM_list.append(p_utils.generate_point(com_x_range, com_y_range, com_z_range))
 
 average_errors = []
+average_losses = []
 
 #print errors
-print("Randomly generated COMs errors:")
+print("Randomly generated COMs errors, COMs, gt_COMs:")
 average_error = 0.
 for i in np.arange(number_of_objects):
     error = np.linalg.norm(ground_truth_COMs[i] - new_COM_list[i])
-    print(error)
+    print(error,"\t\t",new_COM_list[i],"\t\t",ground_truth_COMs[i])
     average_error += error
 average_error /= number_of_objects
 average_errors.append(average_error)
@@ -148,6 +168,7 @@ print()
 
 #generate and run scenes with alternate COMs
 for iter in np.arange(number_of_iterations):
+    print("\n\n")
 
     # make directory for new attempt with alternate COMs
     attempt_dir_path = os.path.join(test_dir,"try_" + str(iter).zfill(4))
@@ -160,6 +181,13 @@ for iter in np.arange(number_of_iterations):
     this_scene_movement_data = run_attempt(attempt_dir_path, point_1, point_2)
     #print("this_scene_movement_data",this_scene_movement_data)
 
+    #update the losses
+    loss = get_loss(this_scene_movement_data, ground_truth_movement_data)
+    average_loss = loss/(3.*number_of_objects)
+    average_losses.append(average_loss)
+    print("\nLoss:",loss)
+    print("Average Loss:",average_loss)
+
     #find new locations for the object COMs
     updated_COMs = []
     for object_index in np.arange(number_of_objects):
@@ -168,13 +196,25 @@ for iter in np.arange(number_of_iterations):
         test_points_this_object = []
         current_object_COM = new_COM_list[object_index]
 
-        #each test point is average of current COM and edge of COM range.
+        '''#each test point is average of current COM and edge of COM range.
         test_points_this_object.append(np.array([0.5*(current_object_COM[0] + com_x_range[0]),current_object_COM[1],current_object_COM[2]]))
         test_points_this_object.append(np.array([0.5*(current_object_COM[0] + com_x_range[1]),current_object_COM[1],current_object_COM[2]]))
         test_points_this_object.append(np.array([current_object_COM[0],0.5*(current_object_COM[1] + com_y_range[0]),current_object_COM[2]]))
         test_points_this_object.append(np.array([current_object_COM[0],0.5*(current_object_COM[1] + com_y_range[1]),current_object_COM[2]]))
         test_points_this_object.append(np.array([current_object_COM[0],current_object_COM[1],0.5*(current_object_COM[2] + com_z_range[0])]))
-        test_points_this_object.append(np.array([current_object_COM[0],current_object_COM[1],0.5*(current_object_COM[2] + com_z_range[1])]))
+        test_points_this_object.append(np.array([current_object_COM[0],current_object_COM[1],0.5*(current_object_COM[2] + com_z_range[1])]))'''
+
+        #each test point is at the edge of the range
+        center_x_range = 0.5 * (com_x_range[0] + com_x_range[1])
+        center_y_range = 0.5 * (com_y_range[0] + com_y_range[1])
+        center_z_range = 0.5 * (com_z_range[0] + com_z_range[1])
+        test_points_this_object.append(np.array([com_x_range[0], center_y_range, center_z_range]))
+        test_points_this_object.append(np.array([com_x_range[1], center_y_range, center_z_range]))
+        test_points_this_object.append(np.array([center_x_range, com_y_range[0], center_z_range]))
+        test_points_this_object.append(np.array([center_x_range, com_y_range[1], center_z_range]))
+        test_points_this_object.append(np.array([center_x_range, center_y_range, com_z_range[0]]))
+        test_points_this_object.append(np.array([center_x_range, center_y_range, com_z_range[1]]))
+
 
         test_point_ratios = []
         # get motions of each test point in ground truth and current scene
@@ -193,6 +233,8 @@ for iter in np.arange(number_of_iterations):
         COM_changes[1] += np.log(test_point_ratios[3])*COM_movement_amount
         COM_changes[2] -= np.log(test_point_ratios[4])*COM_movement_amount
         COM_changes[2] += np.log(test_point_ratios[5])*COM_movement_amount
+        #COM_changes *= 5
+        print("size of changes:",COM_changes)
 
         #define new COM for this object
         new_COM = current_object_COM + COM_changes
@@ -215,24 +257,30 @@ for iter in np.arange(number_of_iterations):
 
     new_COM_list = updated_COMs
 
-    print("New COMs errors:")
+    print("New COMs errors, COMs, gt COMs:")
     average_error = 0.
     for i in np.arange(number_of_objects):
         error = np.linalg.norm(ground_truth_COMs[i] - updated_COMs[i])
-        print(error)
+        print(error,"\t\t",new_COM_list[i],"\t\t",ground_truth_COMs[i])
         average_error += error
     average_error /= number_of_objects
     average_errors.append(average_error)
-    print()
 
 
 print('Time to run simulations:', (time.perf_counter_ns() - sim_start) / 1e9, 's')
 
 
-draw_data.plt.rcParams['figure.figsize'] = [12, 10]
+draw_data.plt.rcParams['figure.figsize'] = [9, 7.5]
+sorted_average_errors = sorted(average_errors)
+gap = 0.1*(sorted_average_errors[-1] - sorted_average_errors[0])
+draw_data.plt.ylim(bottom=0.-gap, top=sorted_average_errors[-1]+gap)
 draw_data.plot_variables_plain(range(number_of_iterations+1), "Iterations", average_errors, "Average COM error", out_dir=test_dir, show=True)
 
-
+draw_data.plt.ylim(bottom=0.)
+sorted_average_losses = sorted(average_losses)
+gap = 0.1*(sorted_average_losses[-1] - sorted_average_losses[0])
+draw_data.plt.ylim(bottom=0.-gap, top=sorted_average_losses[-1]+gap)
+draw_data.plot_variables_plain(range(number_of_iterations), "Iterations", average_losses, "Average Loss", out_dir=test_dir, show=True)
 
 
 p.disconnect()
