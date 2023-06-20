@@ -75,6 +75,12 @@ def get_block_position_and_orientation(object_ID, link_index):
     else:
         return p.getLinkState(object_ID, link_index)[:2]
 
+def get_object_blocks_positions_and_orientations(object_ID):
+    results = []
+    for block_index in np.arange(p.getNumJoints(object_ID)+1):
+        position, orientation = get_block_position_and_orientation(object_ID, block_index - 1)
+        results.append((np.array(position), np.array(orientation)))
+    return results
 
 
 def run_algorithm(scene_file, attempt_folder, point_1, point_2):
@@ -110,30 +116,55 @@ def run_algorithm(scene_file, attempt_folder, point_1, point_2):
         starting_positions.append(starting_position)
         starting_orientations.append(starting_orientation)
 
-    #
+    #get ground truth motion script
     gt_push = os.path.join(test_dir, "ground_truth_push")
     os.mkdir(gt_push)
     gt_motion_script = run_full_push(gt_push, mobile_object_IDs, starting_positions, starting_orientations, cylinderID)
 
-    #reset masses and frictions
+    gt_motion_script_extended_info = []
+    for i in np.arange(len(gt_motion_script[cylinderID])-1):
+        gt_motion_script_extended_info_this_time_step = []
+        for j in np.arange(len(mobile_object_IDs)):
+            object_ID = mobile_object_IDs[j]
+            time_val, position_0, position_1, position_2, orientation_0, orientation_1, orientation_2, orientation_3 = gt_motion_script[object_ID][i]
+            gt_position = (position_0, position_1, position_2)
+            gt_orientation = (orientation_0, orientation_1, orientation_2, orientation_3)
+            p.resetBasePositionAndOrientation(object_ID, gt_position, gt_orientation)
+            gt_motion_script_extended_info_this_time_step.append(get_object_blocks_positions_and_orientations(object_ID))
+        gt_motion_script_extended_info.append(gt_motion_script_extended_info_this_time_step)
+
+
+    #reset masses. Diabled reset frictions for now.
+    ground_truth_masses = []
     for i in np.arange(len(mobile_object_IDs)):
         object_ID = mobile_object_IDs[i]
+        ground_truth_masses_this_object = []
         for j in np.arange(p.getNumJoints(object_ID)+1):
-            frictions[i][j] = 0.3
+            #frictions[i][j] = 0.3
+            ground_truth_masses_this_object.append(masses[i][j] + 0.)
             masses[i][j] = 1./p.getNumJoints(object_ID)
+            mass = masses[i][j]
+            p.changeDynamics(object_ID, j - 1, mass=mass, localInertiaDiagonal=(5. * mass / 12., 5. * mass / 12., mass / 6.))
+        ground_truth_masses.append(ground_truth_masses_this_object)
 
     #TODO: Mention to professors that the interpolation assumption is even more dubious for multiple objects,
     #   due to objects further away being motionless until touched. Since time of touch is unknown, those further-away objects would start moving at t=0.
 
+    #reset positions and orientations to starting locations
+    for object_ID in gt_motion_script.keys():
+        time_val, position_0, position_1, position_2, orientation_0, orientation_1, orientation_2, orientation_3 = gt_motion_script[object_ID][0]
+        position = (position_0, position_1, position_2)
+        orientation = (orientation_0, orientation_1, orientation_2, orientation_3)
+        p.resetBasePositionAndOrientation(object_ID, position, orientation)
 
-    #Algorithm 1 from Changkyu's paper.
-    #TODO: Code Algorithm 1 from Changkyu's paper. Requires changing masses and moments of inertia (DO NOT FORGET MOMENTS OF INERTIA) and running run_push_attempt each time.
-
+    #infer the masses
     loss = 0.
-    for i in np.len(gt_motion_script[cylinderID]):
+    for time_step in np.arange(len(gt_motion_script[cylinderID])-1):
 
-        # reset the pusher
-        pusher_position, pusher_orientation = gt_motion_script[cylinderID][i]
+        # reset the pusher.
+        time_val, position_0, position_1, position_2, orientation_0, orientation_1, orientation_2, orientation_3 = gt_motion_script[cylinderID][time_step]
+        pusher_position = (position_0, position_1, position_2)
+        pusher_orientation = (orientation_0, orientation_1, orientation_2, orientation_3)
         p.resetBasePositionAndOrientation(cylinderID, pusher_position, pusher_orientation)
         pusher_displacement_from_destination = cylinderID - np.array(pusher_position)
         pusher_dist_from_destination = np.linalg.norm(pusher_displacement_from_destination)
@@ -144,55 +175,52 @@ def run_algorithm(scene_file, attempt_folder, point_1, point_2):
         #push
         p.stepSimulation()
 
-        for j in np.arange(len(mobile_object_IDs)):
-            object_ID = mobile_object_IDs[j]
+        #update masses of blocks of each object
+        for i in np.arange(len(mobile_object_IDs)):
+            object_ID = mobile_object_IDs[i]
 
-            #get states of blocks
-            actual_positions_and_angles = []
-            for block_index in np.arange(len(masses[j])):
-                actual_position, actual_orientation = get_block_position_and_orientation(object_ID, block_index-1)
-                actual_position = np.array(actual_position)
-                actual_angle = p.getEulerFromQuaternion(actual_orientation)[2]
-                actual_positions_and_angles.append((actual_position,actual_angle))
+            #get states of object's blocks in the simulation
+            simulated_positions_and_orientations = get_object_blocks_positions_and_orientations(object_ID)
 
-            #reset shape to ground truth and get states of blocks
-            time_val,position_0,position_1,position_2,orientation_0,orientation_1,orientation_2,orientation_3 = gt_motion_script[object_ID][i]
-            gt_position = (position_0,position_1,position_2)
-            gt_orientation = (orientation_0,orientation_1,orientation_2,orientation_3)
-            p.resetBasePositionAndOrientation(object_ID, gt_position, gt_orientation)
-            gt_positions_and_angles = []
-            for block_index in np.arange(len(masses[j])):
-                gt_position, gt_orientation = get_block_position_and_orientation(object_ID, block_index-1)
-                gt_position = np.array(gt_position)
-                gt_angle = p.getEulerFromQuaternion(gt_orientation)[2]
-                gt_positions_and_angles.append((gt_position,gt_angle))
+            #update masses
+            for block_index in np.arange(len(masses[i])):
+                gt_motion = gt_motion_script_extended_info[time_step + 1][i][block_index][0] - gt_motion_script_extended_info[time_step][i][block_index][0]
+                simulated_motion = simulated_positions_and_orientations[block_index][0] - gt_motion_script_extended_info[time_step][i][block_index][0]
 
-            #update masses and frictions
-            for block_index in np.arange(len(masses[j])):
-                state_position_difference = gt_positions_and_angles[block_index][0] - actual_positions_and_angles[block_index][0]
-                state_angle_difference = gt_positions_and_angles[block_index][1] - actual_positions_and_angles[block_index][1]
+                gt_motion_magn = np.linalg.norm(gt_motion)
+                simulated_motion_magn = np.linalg.norm(simulated_motion)
+                threshold = 0.1*dt*pusher_speed
+                #print("gt_motion_magn, simulated_motion_magn", gt_motion_magn, simulated_motion_magn)
+                if (gt_motion_magn > threshold) and (simulated_motion_magn > threshold):
+                    ratio = simulated_motion_magn / gt_motion_magn
+                    ln_ratio = np.log(ratio)
+                    adjusted_ln_ratio = ln_ratio*0.99**time_step
+                    adjusted_ratio = np.exp(adjusted_ln_ratio)
+                    masses[i][block_index] *= adjusted_ratio
+                    #TODO: this is not working
+                    #print("obj, block:",i,block_index)
+                    #print("ratio:",simulated_motion_magn / gt_motion_magn)
 
-                #each of the state differences is like a separate derivative which gets added up to the others.
+
+                mass = masses[i][block_index]
+                p.changeDynamics(object_ID, block_index-1, mass=mass, localInertiaDiagonal=(5.*mass/12.,5.*mass/12.,mass/6.))
+
+                '''#each of the state differences is like a separate derivative which gets added up to the others.
                 # change in m = learning rate * (dm/dx_0 + dm/dx_1 + dm/dx_2 + dI/dtheta * dm/dI)
-                masses[j][block_index] += learning_rate * state_position_difference[0]
-                masses[j][block_index] += learning_rate * state_position_difference[1]
-                masses[j][block_index] += learning_rate * state_position_difference[2]  # change in z coord should be 0
-                masses[j][block_index] += learning_rate * state_angle_difference * 6. #multiply by 6 to account for the fact that we are adjusting mass, not z-axis moment of inertia
+                masses[i][block_index] += learning_rate * state_position_difference[0]
+                masses[i][block_index] += learning_rate * state_position_difference[1]
+                masses[i][block_index] += learning_rate * state_position_difference[2]  # change in z coord should be 0
+                masses[i][block_index] += learning_rate * state_angle_difference * 6. #multiply by 6 to account for the fact that we are adjusting mass, not z-axis moment of inertia'''
 
-                #TODO:
-                # Define learning rate
-                # Eliminate frictions by assuming they are the same as ground truth frictions.
-                # Test the thing.
-
-
-
-            #x is for each block.
+            #write down errors for this block
+            print("object",i)
+            print("\t",ground_truth_masses[i])
+            print("\t",masses[i])
+            print()
 
 
 
 
 
-        #reset masses and frictions
-        loss
 
 run_algorithm(os.path.join("scenes","block_planar_scenes","scene_1.csv"), test_dir, point_1, point_2)

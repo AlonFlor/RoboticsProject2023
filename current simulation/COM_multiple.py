@@ -83,7 +83,7 @@ ground_truth_COMs = np.array(ground_truth_COMs)
 
 
 sim_start = time.perf_counter_ns()
-number_of_simulations = 5
+number_of_simulations = 50
 
 #run the ground truth simulation
 ground_truth_movement_data = run_attempt(ground_truth_folder, point_1, point_2)
@@ -96,9 +96,9 @@ com_x_range, com_y_range, com_z_range = p_utils.get_COM_bounds("cracker_box")
 scene_paths = []
 scene_COMs = []
 scene_errors = []
-for i in np.arange(number_of_simulations):
+for iter in np.arange(number_of_simulations):
     # make directory for one attempt with alternate COMs
-    attempt_dir_path = os.path.join(test_dir,"try_" + str(i).zfill(4))
+    attempt_dir_path = os.path.join(test_dir,"try_" + str(iter).zfill(4))
     os.mkdir(attempt_dir_path)
     scene_paths.append(attempt_dir_path)
 
