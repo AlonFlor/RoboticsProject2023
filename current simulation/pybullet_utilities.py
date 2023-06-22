@@ -59,9 +59,17 @@ def print_image(view_matrix, proj_matrix, imgs_dir, image_num=None, extra_messag
     img.save(image_filename)
 
 
-def make_video(test_dir,imgs_dir):
+def combine_images(image_1_path, image_2_path, new_image_path):
+    image_1 = np.array(Image.open(image_1_path))
+    image_2 = np.array(Image.open(image_2_path))
+    new_image_array = (0.5*image_1).astype("uint8")+(0.5*image_2).astype("uint8")
+    new_image = Image.fromarray(new_image_array,"RGBA")
+    new_image.save(new_image_path)
+
+
+def make_video(test_dir,imgs_dir, prefix=""):
     video_path = os.path.join(test_dir,"video.mp4")
-    command = "ffmpeg.exe -framerate 24 -i " + os.path.join(imgs_dir,"%04d.png") + " -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p " + video_path
+    command = "ffmpeg.exe -framerate 24 -i " + os.path.join(imgs_dir,prefix+"%04d.png") + " -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p " + video_path
     os.popen(command)
 
 

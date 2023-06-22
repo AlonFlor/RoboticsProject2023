@@ -283,5 +283,16 @@ draw_data.plt.ylim(bottom=0.-gap, top=sorted_average_losses[-1]+gap)
 draw_data.plot_variables_plain(range(number_of_iterations), "Iterations", average_losses, "Average Loss", out_dir=test_dir, show=True)
 
 
+#show a comparison of the final images
+imgs_dir = os.path.join(test_dir, "comparison_images")
+os.mkdir(imgs_dir)
+for i in np.arange(number_of_iterations):
+    try_folder_name = "try_"+str(i).zfill(4)
+    p_utils.combine_images(os.path.join(test_dir,"ground_truth","1_after.png"),
+                           os.path.join(test_dir,try_folder_name,"1_after.png"),
+                           os.path.join(imgs_dir,try_folder_name+".png"))
+
+p_utils.make_video(test_dir, imgs_dir, "try_")
+
 p.disconnect()
 

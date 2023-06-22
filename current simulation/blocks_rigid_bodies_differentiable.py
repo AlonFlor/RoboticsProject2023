@@ -21,6 +21,7 @@ dt = 1./240.
 view_matrix, proj_matrix = p_utils.set_up_camera((0.,0.,0.), 0.75, 45, -65)
 
 object_scale = 0.015
+learning_rate = 1.
 
 
 #define pushing data
@@ -121,12 +122,12 @@ def run_algorithm(scene_file, attempt_folder, point_1, point_2):
     os.mkdir(gt_push)
     gt_motion_script = run_full_push(gt_push, mobile_object_IDs, starting_positions, starting_orientations, cylinderID)
 
+    #get ground truth motions for the objects' blocks
     gt_motion_script_extended_info = []
-    for i in np.arange(len(gt_motion_script[cylinderID])-1):
+    for time_step_index in np.arange(len(gt_motion_script[cylinderID])-1):
         gt_motion_script_extended_info_this_time_step = []
-        for j in np.arange(len(mobile_object_IDs)):
-            object_ID = mobile_object_IDs[j]
-            time_val, position_0, position_1, position_2, orientation_0, orientation_1, orientation_2, orientation_3 = gt_motion_script[object_ID][i]
+        for object_ID in mobile_object_IDs:
+            time_val, position_0, position_1, position_2, orientation_0, orientation_1, orientation_2, orientation_3 = gt_motion_script[object_ID][time_step_index]
             gt_position = (position_0, position_1, position_2)
             gt_orientation = (orientation_0, orientation_1, orientation_2, orientation_3)
             p.resetBasePositionAndOrientation(object_ID, gt_position, gt_orientation)
@@ -136,15 +137,15 @@ def run_algorithm(scene_file, attempt_folder, point_1, point_2):
 
     #reset masses. Diabled reset frictions for now.
     ground_truth_masses = []
-    for i in np.arange(len(mobile_object_IDs)):
-        object_ID = mobile_object_IDs[i]
+    for object_index in np.arange(len(mobile_object_IDs)):
+        object_ID = mobile_object_IDs[object_index]
         ground_truth_masses_this_object = []
-        for j in np.arange(p.getNumJoints(object_ID)+1):
+        for block_index in np.arange(p.getNumJoints(object_ID)+1):
             #frictions[i][j] = 0.3
-            ground_truth_masses_this_object.append(masses[i][j] + 0.)
-            masses[i][j] = 1./p.getNumJoints(object_ID)
-            mass = masses[i][j]
-            p.changeDynamics(object_ID, j - 1, mass=mass, localInertiaDiagonal=(5. * mass / 12., 5. * mass / 12., mass / 6.))
+            ground_truth_masses_this_object.append(masses[object_index][block_index] + 0.)
+            masses[object_index][block_index] = 1./p.getNumJoints(object_ID)
+            mass = masses[object_index][block_index]
+            p.changeDynamics(object_ID, block_index - 1, mass=mass, localInertiaDiagonal=(5. * mass / 12., 5. * mass / 12., mass / 6.))
         ground_truth_masses.append(ground_truth_masses_this_object)
 
     #TODO: Mention to professors that the interpolation assumption is even more dubious for multiple objects,
@@ -177,16 +178,17 @@ def run_algorithm(scene_file, attempt_folder, point_1, point_2):
         p.stepSimulation()
 
         #update masses of blocks of each object
-        for i in np.arange(len(mobile_object_IDs)):
-            object_ID = mobile_object_IDs[i]
+        for object_index in np.arange(len(mobile_object_IDs)):
+            object_ID = mobile_object_IDs[object_index]
 
             #get states of object's blocks in the simulation
             simulated_positions_and_orientations = get_object_blocks_positions_and_orientations(object_ID)
 
             #update masses
-            for block_index in np.arange(len(masses[i])):
-                gt_motion = gt_motion_script_extended_info[time_step + 1][i][block_index][0] - gt_motion_script_extended_info[time_step][i][block_index][0]
-                simulated_motion = simulated_positions_and_orientations[block_index][0] - gt_motion_script_extended_info[time_step][i][block_index][0]
+            changes = []
+            for block_index in np.arange(len(masses[object_index])):
+                '''gt_motion = gt_motion_script_extended_info[time_step + 1][object_index][block_index][0] - gt_motion_script_extended_info[time_step][object_index][block_index][0]
+                simulated_motion = simulated_positions_and_orientations[block_index][0] - gt_motion_script_extended_info[time_step][object_index][block_index][0]
 
                 gt_motion_magn = np.linalg.norm(gt_motion)
                 simulated_motion_magn = np.linalg.norm(simulated_motion)
@@ -197,13 +199,18 @@ def run_algorithm(scene_file, attempt_folder, point_1, point_2):
                     ln_ratio = np.log(ratio)
                     adjusted_ln_ratio = ln_ratio*0.99**time_step
                     adjusted_ratio = np.exp(adjusted_ln_ratio)
-                    masses[i][block_index] *= adjusted_ratio
-                    #TODO: this is not working
+                    masses[object_index][block_index] *= adjusted_ratio
                     #print("obj, block:",i,block_index)
-                    #print("ratio:",simulated_motion_magn / gt_motion_magn)
+                    #print("ratio:",simulated_motion_magn / gt_motion_magn)'''
+                difference = simulated_positions_and_orientations[block_index][0] - gt_motion_script_extended_info[time_step + 1][object_index][block_index][0]
+                masses[object_index][block_index] += learning_rate*difference*0.9**time_step
+                #TODO: in original code, each object's block has three spaces in the mass matrix: two mass values and an inertia value.
+                # Here, there is only one mass value per block. I do not want to replace it with a mass matrix; to do so means I have no model based on Changkyu's work,
+                # instead I would have a copy. Therefore, I am stopping the work on this for now.
+                changes.append(learning_rate*difference*0.9**time_step)
 
 
-                mass = masses[i][block_index]
+                mass = masses[object_index][block_index]
                 p.changeDynamics(object_ID, block_index-1, mass=mass, localInertiaDiagonal=(5.*mass/12.,5.*mass/12.,mass/6.))
 
                 '''#each of the state differences is like a separate derivative which gets added up to the others.
@@ -214,10 +221,16 @@ def run_algorithm(scene_file, attempt_folder, point_1, point_2):
                 masses[i][block_index] += learning_rate * state_angle_difference * 6. #multiply by 6 to account for the fact that we are adjusting mass, not z-axis moment of inertia'''
 
             #write down errors for this block
-            print("object",i)
-            print("\t",ground_truth_masses[i])
-            print("\t",masses[i])
+            print("object",object_index)
+            print("\t",ground_truth_masses[object_index])
+            print("\t",masses[object_index])
+            print("\t",changes)
             print()
+
+        #closed loop: reset object positions
+        for object_ID in mobile_object_IDs:
+            pos, orn = gt_motion_script[time_step][object_index]
+            p.resetBasePositionAndOrientation(object_ID, )
 
 
 
