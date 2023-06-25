@@ -37,11 +37,23 @@ point_2 = push_distance * direction_normalized + point_1
 
 
 
+#TODO: have code similar to this for each object type, that returns a dictionary with object types as keys and their relevant com ranges and test points as values.
 #find the acceptable COM bounds, in object coordinates
 com_x_range, com_y_range, com_z_range = p_utils.get_COM_bounds("cracker_box")
 
-#COM movement amount when COM gets updated
-COM_movement_amount = 0.01
+#test points
+test_points_x_amount = 20
+test_points_y_amount = 20
+test_points_z_amount = 5
+test_points_x_coords =np.linspace(com_x_range[0],com_x_range[1], test_points_x_amount+2)[1:-1]
+test_points_y_coords =np.linspace(com_y_range[0],com_y_range[1], test_points_y_amount+2)[1:-1]
+test_points_z_coords =np.linspace(com_z_range[0],com_z_range[1], test_points_z_amount+2)[1:-1]
+test_points = []
+for i in np.arange(test_points_x_amount):
+    for j in np.arange(test_points_y_amount):
+        for k in np.arange(test_points_z_amount):
+            test_points.append(np.array([test_points_x_coords[i],test_points_y_coords[j],test_points_z_coords[k]]))
+num_test_points_per_object = test_points_x_amount * test_points_y_amount * test_points_z_amount
 
 
 
@@ -60,22 +72,18 @@ file_handling.copy_file(original_scene_loc, ground_truth_scene_loc)
 
 
 
-def get_loss(data_sim, data_gt):
+def get_loss(data_sim, data_gt, test_points):
     '''Calculate the loss as the sum of distances between simulated and ground truth for three test points (x,y,z) for each object.'''
     loss = 0.
     for i in np.arange(number_of_objects):
         pos, orn = data_sim[i]
         pos_gt, orn_gt = data_gt[i]
 
-        test_point_1 = p_utils.get_world_space_point(np.array([0.01,0.,0.]), pos, orn)
-        test_point_1_gt = p_utils.get_world_space_point(np.array([0.01,0.,0.]), pos_gt, orn_gt)
-        loss += np.linalg.norm(test_point_1-test_point_1_gt)
-        test_point_2 = p_utils.get_world_space_point(np.array([0.,0.01,0.]), pos, orn)
-        test_point_2_gt = p_utils.get_world_space_point(np.array([0.,0.01,0.]), pos_gt, orn_gt)
-        loss += np.linalg.norm(test_point_2-test_point_2_gt)
-        test_point_3 = p_utils.get_world_space_point(np.array([0.,0.,0.01]), pos, orn)
-        test_point_3_gt = p_utils.get_world_space_point(np.array([0.,0.,0.01]), pos_gt, orn_gt)
-        loss += np.linalg.norm(test_point_3-test_point_3_gt)
+        #TODO edit this part when allowing multiple object types
+        for test_point in test_points:
+            test_point_world_coords = p_utils.get_world_space_point(test_point, pos, orn)
+            test_point_gt_world_coords = p_utils.get_world_space_point(test_point, pos_gt, orn_gt)
+            loss += np.linalg.norm(test_point_world_coords-test_point_gt_world_coords)
 
     return loss
 
@@ -167,11 +175,11 @@ print()
 
 
 #generate and run scenes with alternate COMs
-for iter in np.arange(number_of_iterations):
-    print("\n\n")
+for iter_num in np.arange(number_of_iterations):
+    print("\n\nRound",iter_num+1,"out of",number_of_iterations)
 
     # make directory for new attempt with alternate COMs
-    attempt_dir_path = os.path.join(test_dir,"try_" + str(iter).zfill(4))
+    attempt_dir_path = os.path.join(test_dir,"try_" + str(iter_num).zfill(4))
     os.mkdir(attempt_dir_path)
 
     # create scene file
@@ -182,10 +190,10 @@ for iter in np.arange(number_of_iterations):
     #print("this_scene_movement_data",this_scene_movement_data)
 
     #update the losses
-    loss = get_loss(this_scene_movement_data, ground_truth_movement_data)
-    average_loss = loss/(3.*number_of_objects)
+    loss = get_loss(this_scene_movement_data, ground_truth_movement_data, test_points) #TODO make it read different test points for each object type
+    average_loss = loss/(num_test_points_per_object * number_of_objects)
     average_losses.append(average_loss)
-    print("\nLoss:",loss)
+    print("Loss:",loss)
     print("Average Loss:",average_loss)
 
     #find new locations for the object COMs
@@ -193,53 +201,45 @@ for iter in np.arange(number_of_iterations):
     for object_index in np.arange(number_of_objects):
 
         #generate test points around each object's current COM
-        test_points_this_object = []
         current_object_COM = new_COM_list[object_index]
 
-        '''#each test point is average of current COM and edge of COM range.
-        test_points_this_object.append(np.array([0.5*(current_object_COM[0] + com_x_range[0]),current_object_COM[1],current_object_COM[2]]))
-        test_points_this_object.append(np.array([0.5*(current_object_COM[0] + com_x_range[1]),current_object_COM[1],current_object_COM[2]]))
-        test_points_this_object.append(np.array([current_object_COM[0],0.5*(current_object_COM[1] + com_y_range[0]),current_object_COM[2]]))
-        test_points_this_object.append(np.array([current_object_COM[0],0.5*(current_object_COM[1] + com_y_range[1]),current_object_COM[2]]))
-        test_points_this_object.append(np.array([current_object_COM[0],current_object_COM[1],0.5*(current_object_COM[2] + com_z_range[0])]))
-        test_points_this_object.append(np.array([current_object_COM[0],current_object_COM[1],0.5*(current_object_COM[2] + com_z_range[1])]))'''
 
-        #each test point is at the edge of the range
-        center_x_range = 0.5 * (com_x_range[0] + com_x_range[1])
-        center_y_range = 0.5 * (com_y_range[0] + com_y_range[1])
-        center_z_range = 0.5 * (com_z_range[0] + com_z_range[1])
-        test_points_this_object.append(np.array([com_x_range[0], center_y_range, center_z_range]))
-        test_points_this_object.append(np.array([com_x_range[1], center_y_range, center_z_range]))
-        test_points_this_object.append(np.array([center_x_range, com_y_range[0], center_z_range]))
-        test_points_this_object.append(np.array([center_x_range, com_y_range[1], center_z_range]))
-        test_points_this_object.append(np.array([center_x_range, center_y_range, com_z_range[0]]))
-        test_points_this_object.append(np.array([center_x_range, center_y_range, com_z_range[1]]))
-
-
-        test_point_ratios = []
         # get motions of each test point in ground truth and current scene
-        for test_point in test_points_this_object:
+        test_point_differences = []
+        for test_point in test_points: #TODO make it read different test points for each object type
             test_point_start = p_utils.get_world_space_point(test_point, starting_data[object_index][0], starting_data[object_index][1])
             test_point_gt = p_utils.get_world_space_point(test_point, ground_truth_movement_data[object_index][0], ground_truth_movement_data[object_index][1])
             test_point_sim = p_utils.get_world_space_point(test_point, this_scene_movement_data[object_index][0], this_scene_movement_data[object_index][1])
-            test_point_ratios.append(np.linalg.norm(test_point_sim - test_point_start) / np.linalg.norm(test_point_gt - test_point_start))
+            test_point_differences.append(np.linalg.norm(test_point_sim - test_point_start) - np.linalg.norm(test_point_gt - test_point_start))
 
-        #choose movements to this object's COM based on motion ratios
-        print("test_point_ratios",test_point_ratios)
+        #choose movements to this object's COM based on motion differences
+        print("test_point_differences",test_point_differences)
         COM_changes = np.array([0.,0.,0.])
-        COM_changes[0] -= np.log(test_point_ratios[0])*COM_movement_amount
-        COM_changes[0] += np.log(test_point_ratios[1])*COM_movement_amount
-        COM_changes[1] -= np.log(test_point_ratios[2])*COM_movement_amount
-        COM_changes[1] += np.log(test_point_ratios[3])*COM_movement_amount
-        COM_changes[2] -= np.log(test_point_ratios[4])*COM_movement_amount
-        COM_changes[2] += np.log(test_point_ratios[5])*COM_movement_amount
-        #COM_changes *= 5
-        print("size of changes:",COM_changes)
+        for i in np.arange(num_test_points_per_object):
+            diff = current_object_COM - test_points[i]
+            diff_dir =  diff / np.linalg.norm(diff)
+            COM_changes -= diff_dir * test_point_differences[i]
+
+        #divide COM changes by the number of test points
+        COM_changes /= num_test_points_per_object
+
+        #clamp COM changes. TODO: consider a more principled way of doing this
+        COM_changes_magn = np.linalg.norm(COM_changes)
+        COM_changes_magn_limit = 0.03
+        if COM_changes_magn > COM_changes_magn_limit:
+            COM_changes /= COM_changes_magn
+            COM_changes *= COM_changes_magn_limit
+
+        #damp COM changes
+        #COM_changes *= 0.9 ** iter_num
+
+        print("changes to COM:",COM_changes)
 
         #define new COM for this object
         new_COM = current_object_COM + COM_changes
 
         #clamp object's new COM to bounds
+        #TODO get specific com ranges for this object's type
         if new_COM[0] < com_x_range[0]:
             new_COM[0] = com_x_range[0]
         if new_COM[0] > com_x_range[1]:
