@@ -200,16 +200,20 @@ for iter_num in np.arange(number_of_iterations):
     updated_COMs = []
     for object_index in np.arange(number_of_objects):
 
-        #generate test points around each object's current COM
+        #get the center of mass of this object
         current_object_COM = new_COM_list[object_index]
 
+        #get position and orientation data
+        start_position, start_orientation = starting_data[object_index]
+        position, orientation = this_scene_movement_data[object_index]
+        position_gt, orientation_gt = ground_truth_movement_data[object_index]
 
         # get motions of each test point in ground truth and current scene
         test_point_differences = []
         for test_point in test_points: #TODO make it read different test points for each object type
-            test_point_start = p_utils.get_world_space_point(test_point, starting_data[object_index][0], starting_data[object_index][1])
-            test_point_gt = p_utils.get_world_space_point(test_point, ground_truth_movement_data[object_index][0], ground_truth_movement_data[object_index][1])
-            test_point_sim = p_utils.get_world_space_point(test_point, this_scene_movement_data[object_index][0], this_scene_movement_data[object_index][1])
+            test_point_start = p_utils.get_world_space_point(test_point, start_position, start_orientation)
+            test_point_gt = p_utils.get_world_space_point(test_point, position_gt, orientation_gt)
+            test_point_sim = p_utils.get_world_space_point(test_point, position, orientation)
             test_point_differences.append(np.linalg.norm(test_point_sim - test_point_start) - np.linalg.norm(test_point_gt - test_point_start))
 
         #choose movements to this object's COM based on motion differences
@@ -222,6 +226,29 @@ for iter_num in np.arange(number_of_iterations):
 
         #divide COM changes by the number of test points
         COM_changes /= num_test_points_per_object
+
+        #TODO make sure center of rotation is accurate by seeing if object coords of COR remains consistent when the transformation is done using before and after poses,
+        # then check if direction of COM change given by all of the test points matches direction of COM change given by just the COM test point,
+        # and see if magnitude of COM change given by the COM test point is not too large (since it does not get divided by num_test_points_per_object nor canceled out by other
+        # test points), consider checking for one object only. Also, multiply all derivatives by chord value.
+        '''#get COM point differences for COM changes directly from current COM
+        current_object_COM_world_coords_before = p_utils.get_world_space_point(current_object_COM, start_position, start_orientation)
+        current_object_COM_world_coords_after = p_utils.get_world_space_point(current_object_COM, position, orientation)
+        current_object_COM_world_coords_gt = p_utils.get_world_space_point(current_object_COM, position_gt, orientation_gt)
+        current_COM_point_differences = np.linalg.norm(current_object_COM_world_coords_after - current_object_COM_world_coords_before) \
+                                        - np.linalg.norm(current_object_COM_world_coords_gt - current_object_COM_world_coords_before)
+
+        #get the center of rotation, for COM changes directly from current COM
+        test_points_for_COR = [test_points[0], test_points[-1]]
+        COR_2D = p_utils.center_of_rotation_2D(test_points_for_COR, start_position, start_orientation, position, orientation)
+        if COR_2D is not None:
+            COR = np.array([COR_2D[0], COR_2D[1], current_object_COM_world_coords_after[2]])
+            COR_object_coords = p_utils.get_object_space_point(COR, position, orientation)
+
+            #add COM changes from current COM
+            r_COR_COM = current_object_COM - COR_object_coords
+            r_COR_COM_dir = r_COR_COM / np.linalg.norm(r_COR_COM)
+            COM_changes -= r_COR_COM_dir * current_COM_point_differences'''
 
         #clamp COM changes. TODO: consider a more principled way of doing this
         COM_changes_magn = np.linalg.norm(COM_changes)

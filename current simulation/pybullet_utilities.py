@@ -230,8 +230,11 @@ def quaternion_difference(q1, q2):
 def quaternion_angular_magitude(q):
     return 2.*np.arctan2(np.linalg.norm(np.array(q)[:3]), q[3])
 
+def quat_inverse(quat):
+    return (-quat[0],-quat[1],-quat[2],quat[3])
+
 def rotate_vector(vec, quat):
-    quat_inv = (-quat[0],-quat[1],-quat[2],quat[3])
+    quat_inv = quat_inverse(quat)
     vec_as_quat = (vec[0], vec[1], vec[2], 0.)
     qP = quaternion_multiplication(quat, vec_as_quat)
     result = quaternion_multiplication(qP, quat_inv)
@@ -245,6 +248,42 @@ def generate_num(val_range):
 
 def get_world_space_point(point, position, orientation):
     return rotate_vector(point, orientation)+position
+
+def get_object_space_point(point, position, orientation):
+    return rotate_vector(point-position, quat_inverse(orientation))
+
+def center_of_rotation_2D(test_points_object_coords, start_position, start_orientation, position, orientation):
+    num_test_points = len(test_points_object_coords)
+
+    #get the test points in world coordinates
+    test_points_start_world_coords = []
+    test_points_end_world_coords = []
+    for test_point in test_points_object_coords:
+        test_points_start_world_coords.append(get_world_space_point(test_point, start_position, start_orientation)[:2])
+        test_points_end_world_coords.append(get_world_space_point(test_point, position, orientation)[:2])
+
+    #find bisection points for the test points
+    test_points_bisection_points = []
+    for i in np.arange(num_test_points):
+        test_points_bisection_points.append(0.5*test_points_start_world_coords[i] + 0.5*test_points_end_world_coords[i])
+
+    #define bisection lines for the test points
+    test_point_line_coefficients = np.zeros((num_test_points,2))
+    test_point_line_rhs = np.zeros((num_test_points))
+    for i in np.arange(num_test_points):
+        line_normal = test_points_bisection_points[i] - test_points_start_world_coords[i]
+        line_normal_magn = np.linalg.norm(line_normal)
+        if line_normal_magn == 0:
+            return None
+        line_normal = line_normal / line_normal_magn
+        line_rhs = np.dot(line_normal, test_points_bisection_points[i])
+        test_point_line_coefficients[i] = line_normal
+        test_point_line_rhs[i] = line_rhs
+    try:
+        return np.linalg.solve(test_point_line_coefficients, test_point_line_rhs)
+    except np.linalg.LinAlgError:
+        return None
+
 
 
 
