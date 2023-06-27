@@ -67,9 +67,9 @@ def combine_images(image_1_path, image_2_path, new_image_path):
     new_image.save(new_image_path)
 
 
-def make_video(test_dir,imgs_dir, prefix=""):
+def make_video(test_dir,imgs_dir, prefix="", fps=24):
     video_path = os.path.join(test_dir,"video.mp4")
-    command = "ffmpeg.exe -framerate 24 -i " + os.path.join(imgs_dir,prefix+"%04d.png") + " -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p " + video_path
+    command = f"ffmpeg.exe -framerate {fps} -i " + os.path.join(imgs_dir,prefix+"%04d.png") + " -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p " + video_path
     os.popen(command)
 
 
@@ -227,8 +227,14 @@ def quaternion_multiplication(q1, q2):
 def quaternion_difference(q1, q2):
     return quaternion_multiplication(q1, (-q2[0], -q2[1], -q2[2], q2[3]))
 
-def quaternion_angular_magitude(q):
+def quaternion_angular_magnitude(q):
     return 2.*np.arctan2(np.linalg.norm(np.array(q)[:3]), q[3])
+
+def quaternion_to_axis_angle(q):
+    angle = 2.*np.arccos(q[3])
+    axis = np.array(q[:3])
+    axis = axis / np.linalg.norm(axis)
+    return axis, angle
 
 def quat_inverse(quat):
     return (-quat[0],-quat[1],-quat[2],quat[3])
@@ -252,36 +258,37 @@ def get_world_space_point(point, position, orientation):
 def get_object_space_point(point, position, orientation):
     return rotate_vector(point-position, quat_inverse(orientation))
 
-def center_of_rotation_2D(test_points_object_coords, start_position, start_orientation, position, orientation):
-    num_test_points = len(test_points_object_coords)
+def center_of_rotation(test_points_object_coords, start_position, start_orientation, position, orientation):
+    num_test_points = len(test_points_object_coords) #should be 3
 
     #get the test points in world coordinates
     test_points_start_world_coords = []
     test_points_end_world_coords = []
     for test_point in test_points_object_coords:
-        test_points_start_world_coords.append(get_world_space_point(test_point, start_position, start_orientation)[:2])
-        test_points_end_world_coords.append(get_world_space_point(test_point, position, orientation)[:2])
+        test_points_start_world_coords.append(get_world_space_point(test_point, start_position, start_orientation))
+        test_points_end_world_coords.append(get_world_space_point(test_point, position, orientation))
 
     #find bisection points for the test points
     test_points_bisection_points = []
     for i in np.arange(num_test_points):
         test_points_bisection_points.append(0.5*test_points_start_world_coords[i] + 0.5*test_points_end_world_coords[i])
 
-    #define bisection lines for the test points
-    test_point_line_coefficients = np.zeros((num_test_points,2))
-    test_point_line_rhs = np.zeros((num_test_points))
+    #define bisection planes for the test points
+    test_point_plane_coefficients = np.zeros((num_test_points,3))
+    test_point_plane_rhs = np.zeros((num_test_points))
     for i in np.arange(num_test_points):
-        line_normal = test_points_bisection_points[i] - test_points_start_world_coords[i]
-        line_normal_magn = np.linalg.norm(line_normal)
-        if line_normal_magn == 0:
+        plane_normal = test_points_bisection_points[i] - test_points_start_world_coords[i]
+        plane_normal_magn = np.linalg.norm(plane_normal)
+        if plane_normal_magn == 0:
             return None
-        line_normal = line_normal / line_normal_magn
-        line_rhs = np.dot(line_normal, test_points_bisection_points[i])
-        test_point_line_coefficients[i] = line_normal
-        test_point_line_rhs[i] = line_rhs
+        plane_normal = plane_normal / plane_normal_magn
+        plane_rhs = np.dot(plane_normal, test_points_bisection_points[i])
+        test_point_plane_coefficients[i] = plane_normal
+        test_point_plane_rhs[i] = plane_rhs
     try:
-        return np.linalg.solve(test_point_line_coefficients, test_point_line_rhs)
+        return np.linalg.lstsq(test_point_plane_coefficients, test_point_plane_rhs)[0]
     except np.linalg.LinAlgError:
+        print("returning none")
         return None
 
 
@@ -412,7 +419,7 @@ def get_block_object_type_info(object_type):
     return obj_data_to_return, default_masses, default_frictions
 
 
-def open_saved_block_scene(scene_file, test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list, object_scale):
+def open_saved_cell_scene(scene_file, test_dir, shapes_list, motion_script, mobile_object_IDs, mobile_object_types, held_fixed_list, object_scale):
     scene_data = file_handling.read_csv_file(scene_file, [str, float, float, float, float, float, float, float, int])
 
     # load plane
@@ -463,7 +470,7 @@ def open_saved_block_scene(scene_file, test_dir, shapes_list, motion_script, mob
 
 
 
-def get_COM_bounds(object_type, crop_fraction = 0.8):
+def get_COM_bounds(object_type, crop_fraction_x = 0.8, crop_fraction_y = 0.8, crop_fraction_z = 0.8):
     '''find the acceptable geometric bounds for a COM, in object coordinates'''
     bounding_points = file_handling.read_csv_file(os.path.join("object models",object_type,"precomputed_bounding_points.csv"),[float, float, float])
     min_x = max_x = bounding_points[0][0]
@@ -491,9 +498,9 @@ def get_COM_bounds(object_type, crop_fraction = 0.8):
     com_y_range_dist = 0.5*(max_y - min_y)
     com_z_range_dist = 0.5*(max_z - min_z)
 
-    com_new_x_range_dist = crop_fraction*com_x_range_dist
-    com_new_y_range_dist = crop_fraction*com_y_range_dist
-    com_new_z_range_dist = crop_fraction*com_z_range_dist
+    com_new_x_range_dist = crop_fraction_x*com_x_range_dist
+    com_new_y_range_dist = crop_fraction_y*com_y_range_dist
+    com_new_z_range_dist = crop_fraction_z*com_z_range_dist
 
     com_x_range = (com_x_range_center - com_new_x_range_dist, com_x_range_center + com_new_x_range_dist)
     com_y_range = (com_y_range_center - com_new_y_range_dist, com_y_range_center + com_new_y_range_dist)
