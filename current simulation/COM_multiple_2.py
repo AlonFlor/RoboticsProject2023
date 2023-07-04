@@ -25,11 +25,13 @@ os.mkdir(test_dir)
 
 
 #define pushing data
-push_distance = 0.15
+push_distance = 0.25#0.15
 cylinder_height_offset = np.array([0., 0., 0.03])
 
 point_1 = np.array([0.2,0.,0.]) + cylinder_height_offset
 point_2 = np.array([-0.3,0.,0.]) + cylinder_height_offset
+#point_1 = np.array([0.15,0.,0.]) + cylinder_height_offset
+#point_2 = np.array([-0.3,0.,0.]) + cylinder_height_offset
 
 direction = point_2 - point_1
 direction_normalized = direction / np.linalg.norm(direction)
@@ -37,28 +39,20 @@ point_2 = push_distance * direction_normalized + point_1
 
 
 
-#TODO: have code similar to this for each object type, that returns a dictionary with object types as keys and their relevant com ranges and test points as values.
-#find the acceptable COM bounds, in object coordinates
-com_x_range, com_y_range, com_z_range = p_utils.get_COM_bounds("cracker_box", 0.7, 0.8, 0.7)
-print("ranges",com_x_range, com_y_range, com_z_range)
 
-#test points
-test_points_x_amount = 5
-test_points_y_amount = 5
-test_points_z_amount = 5
-test_points_x_coords =np.linspace(com_x_range[0],com_x_range[1], test_points_x_amount+2)[1:-1]
-test_points_y_coords =np.linspace(com_y_range[0],com_y_range[1], test_points_y_amount+2)[1:-1]
-test_points_z_coords =np.linspace(com_z_range[0],com_z_range[1], test_points_z_amount+2)[1:-1]
-test_points = []
-for i in np.arange(test_points_x_amount):
-    for j in np.arange(test_points_y_amount):
-        for k in np.arange(test_points_z_amount):
-            test_points.append(np.array([test_points_x_coords[i],test_points_y_coords[j],test_points_z_coords[k]]))
-num_test_points_per_object = test_points_x_amount * test_points_y_amount * test_points_z_amount
 
+num_test_points_per_object = 125 #want to change this? Adjust the number in the get_com_bounds_and_test_points_for_object_type function in pybullet_utilities.py
+
+object_type_com_bounds_and_test_points = {}
+object_type_com_bounds_and_test_points["cracker_box"] = p_utils.get_com_bounds_and_test_points_for_object_type("cracker_box", 0.7, 0.8, 0.7)
+object_type_com_bounds_and_test_points["master_chef_can"] = p_utils.get_com_bounds_and_test_points_for_object_type("master_chef_can", 0.7, 0.7, 0.7)
+object_type_com_bounds_and_test_points["adjustable_wrench"] = p_utils.get_com_bounds_and_test_points_for_object_type("adjustable_wrench", 0.7, 0.7, 0.7)
+object_type_com_bounds_and_test_points["pudding_box"] = p_utils.get_com_bounds_and_test_points_for_object_type("pudding_box", 0.7, 0.7, 0.7)
+object_type_com_bounds_and_test_points["mustard_bottle"] = p_utils.get_com_bounds_and_test_points_for_object_type("mustard_bottle", 0.7, 0.7, 0.7)
 
 
 #define scene, number of objects in that scene, and number of iterations
+#original_scene_loc = os.path.join("scenes","four_items.csv")
 #original_scene_loc = os.path.join("scenes","scene_boxes_with_different_COMs.csv")
 original_scene_loc = os.path.join("scenes","scene_COM_overlay_one_object.csv")
 number_of_objects = 1#4
@@ -144,8 +138,14 @@ for object_data in original_scene_data:
     ground_truth_COMs.append(np.array(object_data[1:4]))
 ground_truth_COMs = np.array(ground_truth_COMs)
 
+object_types = []
+for object_data in original_scene_data:
+    object_types.append(object_data[0])
+
 #make sure ground truth COMs are in the COM bounds
-for gt_COM in ground_truth_COMs:
+for i in np.arange(number_of_objects):
+    gt_COM = ground_truth_COMs[i]
+    com_x_range,com_y_range,com_z_range = object_type_com_bounds_and_test_points[object_types[i]]["com_bounds"]
     out_of_range = (gt_COM[0] < com_x_range[0]) or (gt_COM[0] > com_x_range[1]) or \
                    (gt_COM[1] < com_y_range[0]) or (gt_COM[1] > com_y_range[1]) or \
                    (gt_COM[2] < com_z_range[0]) or (gt_COM[2] > com_z_range[1])
@@ -164,6 +164,7 @@ starting_data, ground_truth_movement_data = run_attempt(ground_truth_folder, poi
 #generate random COMs
 current_COMs_list = []
 for i in np.arange(number_of_objects):
+    com_x_range,com_y_range,com_z_range = object_type_com_bounds_and_test_points[object_types[i]]["com_bounds"]
     current_COMs_list.append(p_utils.generate_point(com_x_range, com_y_range, com_z_range))
 
 average_errors = []
@@ -173,6 +174,7 @@ avg_loss_threshold = 0.003
 
 
 #generate and run scenes with alternate COMs
+import draw_data
 num_iterations = 0
 for iter_num in np.arange(max_number_of_iterations):
     num_iterations +=1
@@ -216,7 +218,7 @@ for iter_num in np.arange(max_number_of_iterations):
     #update the losses
     loss = 0.
     for object_index in np.arange(number_of_objects):
-        #TODO make get_loss_for_object read different test points for each object type
+        test_points = object_type_com_bounds_and_test_points[object_types[object_index]]["test_points"]
         loss+= get_loss_for_object(this_scene_movement_data[object_index], ground_truth_movement_data[object_index], test_points)
     average_loss = loss/(num_test_points_per_object * number_of_objects)
     average_losses.append(average_loss)
@@ -240,6 +242,8 @@ for iter_num in np.arange(max_number_of_iterations):
         position, orientation = this_scene_movement_data[object_index]
         position_gt, orientation_gt = ground_truth_movement_data[object_index]
 
+        #TODO want to transition to using angle differences. Main problem: do not know what angles. Need to work out equations before implementing.
+
         # current_COM_point_difference
         current_object_COM_world_coords_start = p_utils.get_world_space_point(current_object_COM, start_position, start_orientation)
         current_object_COM_world_coords_sim = p_utils.get_world_space_point(current_object_COM, position, orientation)
@@ -249,30 +253,42 @@ for iter_num in np.arange(max_number_of_iterations):
 
         # get motions of each test point in ground truth and current scene
         test_point_differences = []
-        for test_point in test_points: #TODO make it read different test points for each object type
+        alt_tpd = []
+        test_points = object_type_com_bounds_and_test_points[object_types[object_index]]["test_points"]
+        for test_point in test_points:
             test_point_start = p_utils.get_world_space_point(test_point, start_position, start_orientation)
             test_point_gt = p_utils.get_world_space_point(test_point, position_gt, orientation_gt)
             test_point_sim = p_utils.get_world_space_point(test_point, position, orientation)
             test_point_motion_sim = np.linalg.norm(test_point_sim - test_point_start)
             test_point_motion_gt = np.linalg.norm(test_point_gt - test_point_start)
             test_point_differences.append(test_point_motion_sim - current_object_COM_motion_sim - (test_point_motion_gt - current_object_COM_motion_gt))
+            alt_tpd.append(test_point_motion_sim - test_point_motion_gt)
 
+        #TODO consider saving previous simulations, so if two COM candidates are encountered with changes pointing towards each other, we can look at a weighted average COM immediately.
 
         #choose movements to this object's COM based on motion differences
-        #TODO consider investigating whether COM_changes can be anti-aligned with the actual path to the ground truth COM for the single-object scenario,
-        # and if so why would the combined test points steer the COM in the wrong direction.
         #print("test_point_differences",test_point_differences)
         COM_changes = np.array([0.,0.,0.])
         for i in np.arange(num_test_points_per_object):
             diff = current_object_COM - test_points[i]
-            diff_dir =  diff / np.linalg.norm(diff)
-            COM_changes -= diff_dir * 10.*(0.9**iter_num)*test_point_differences[i]#(test_point_differences[i] - current_COM_point_difference)
-            #print(test_point_differences[i],-diff_dir,"\t\t\t", -diff_dir * 10.*(0.9**iter_num)*test_point_differences[i])
-            #print(current_object_COM,test_points[i], diff_dir,"\n")
-        #print("current_COM_point_difference",-current_COM_point_difference)
+            diff_dir =  np.sign(diff)#diff / np.linalg.norm(diff)
+            COM_changes -= diff_dir * 10.*(0.9**iter_num)*test_point_differences[i]
+
+        alt_COM_changes = np.array([0.,0.,0.])
+        for i in np.arange(num_test_points_per_object):
+            diff = current_object_COM - test_points[i]
+            diff_dir =  np.sign(diff)#diff / np.linalg.norm(diff)
+            alt_COM_changes -= diff_dir * 10.*(0.9**iter_num)*alt_tpd[i]
 
         #divide COM changes by the number of test points
         COM_changes /= num_test_points_per_object
+        alt_COM_changes /= num_test_points_per_object
+
+        print("COM_changes:",COM_changes)
+        print("alt_COM_changes:",alt_COM_changes)
+        print("Dot product between the two possible COM_changes:", np.dot(COM_changes / np.linalg.norm(COM_changes), alt_COM_changes / np.linalg.norm(alt_COM_changes)))
+        print("Magnitudes for comparison:", np.linalg.norm(COM_changes), np.linalg.norm(alt_COM_changes))
+        print()
 
         #clamp COM changes. TODO: consider a more principled way of doing this
         COM_changes_magn = np.linalg.norm(COM_changes)
@@ -293,7 +309,7 @@ for iter_num in np.arange(max_number_of_iterations):
         new_COM = current_object_COM + COM_changes
 
         #clamp object's new COM to bounds
-        #TODO get specific com ranges for this object's type
+        com_x_range, com_y_range, com_z_range = object_type_com_bounds_and_test_points[object_types[object_index]]["com_bounds"]
         if new_COM[0] < com_x_range[0]:
             new_COM[0] = com_x_range[0]
         if new_COM[0] > com_x_range[1]:
@@ -309,6 +325,7 @@ for iter_num in np.arange(max_number_of_iterations):
 
         updated_COMs.append(new_COM)
         print()
+        #exit()
 
     current_COMs_list = updated_COMs
 

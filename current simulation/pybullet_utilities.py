@@ -508,6 +508,28 @@ def get_COM_bounds(object_type, crop_fraction_x = 0.8, crop_fraction_y = 0.8, cr
 
     return com_x_range, com_y_range, com_z_range
 
+def get_com_bounds_and_test_points_for_object_type(object_type, crop_fraction_x, crop_fraction_y, crop_fraction_z):
+    '''find the acceptable COM bounds, in object coordinates, and find a list of test points in object coordinates'''
+
+    #find the acceptable COM bounds, in object coordinates
+    com_x_range, com_y_range, com_z_range = get_COM_bounds(object_type, crop_fraction_x, crop_fraction_y, crop_fraction_z)
+    #print("ranges",com_x_range, com_y_range, com_z_range)
+
+    #test points
+    test_points_x_amount = 5
+    test_points_y_amount = 5
+    test_points_z_amount = 5
+    test_points_x_coords =np.linspace(com_x_range[0],com_x_range[1], test_points_x_amount+2)[1:-1]
+    test_points_y_coords =np.linspace(com_y_range[0],com_y_range[1], test_points_y_amount+2)[1:-1]
+    test_points_z_coords =np.linspace(com_z_range[0],com_z_range[1], test_points_z_amount+2)[1:-1]
+    test_points = []
+    for i in np.arange(test_points_x_amount):
+        for j in np.arange(test_points_y_amount):
+            for k in np.arange(test_points_z_amount):
+                test_points.append(np.array([test_points_x_coords[i],test_points_y_coords[j],test_points_z_coords[k]]))
+
+    return {"com_bounds":(com_x_range, com_y_range, com_z_range),"test_points":test_points}
+
 
 def add_to_motion_script(id, time_val, motion_script):
     position, orientation = p.getBasePositionAndOrientation(id)
