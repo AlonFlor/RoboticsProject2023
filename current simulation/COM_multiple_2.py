@@ -203,23 +203,38 @@ for iter_num in np.arange(max_number_of_iterations):
 
     #update angle errors
     average_angle_error = 0.
-    for i in np.arange(number_of_objects):
+    sim_angles = []
+    gt_angles = []
+    for object_index in np.arange(number_of_objects):
         #get position and orientation data
-        start_position, start_orientation = starting_data[i]
-        position, orientation = this_scene_movement_data[i]
-        position_gt, orientation_gt = ground_truth_movement_data[i]
-        axis, angle = p_utils.quaternion_to_axis_angle(p_utils.quaternion_difference(orientation, start_orientation))
-        gt_axis, gt_angle = p_utils.quaternion_to_axis_angle(p_utils.quaternion_difference(orientation_gt, start_orientation))
-        average_angle_error += (angle*axis[2] - gt_angle*gt_axis[2])*180./np.pi
+        start_position, start_orientation = starting_data[object_index]
+        position, orientation = this_scene_movement_data[object_index]
+        position_gt, orientation_gt = ground_truth_movement_data[object_index]
+
+
+        #get axis in object coords around which object rotates
+        rotation_axis_index, rotation_axis_sign = object_angle_axes[object_index]
+
+        #get angles
+        sim_minus_start = p_utils.quaternion_difference(orientation, start_orientation)
+        gt_minus_start = p_utils.quaternion_difference(orientation_gt, start_orientation)
+        sim_axis, sim_angle = p_utils.quaternion_to_axis_angle(sim_minus_start)
+        gt_axis, gt_angle = p_utils.quaternion_to_axis_angle(gt_minus_start)
+        sim_angle = rotation_axis_sign*sim_axis[2]*sim_angle
+        gt_angle = rotation_axis_sign*gt_axis[2]*gt_angle
+
+        sim_angles.append(sim_angle)
+        gt_angles.append(gt_angle)
+        average_angle_error += (sim_angle - gt_angle)*180./np.pi
     average_angle_error /= number_of_objects
     average_angle_errors.append(average_angle_error)
 
     #update COM errors
     print("Current COM errors, COMs, gt COMs:")
     average_error = 0.
-    for i in np.arange(number_of_objects):
-        error = np.linalg.norm(ground_truth_COMs[i] - current_COMs_list[i])
-        print(error,"\t\t", current_COMs_list[i], "\t\t", ground_truth_COMs[i])
+    for object_index in np.arange(number_of_objects):
+        error = np.linalg.norm(ground_truth_COMs[object_index] - current_COMs_list[object_index])
+        print(error,"\t\t", current_COMs_list[object_index], "\t\t", ground_truth_COMs[object_index])
         average_error += error
     average_error /= number_of_objects
     average_errors.append(average_error)
@@ -240,7 +255,6 @@ for iter_num in np.arange(max_number_of_iterations):
 
     #find new locations for the object COMs
     updated_COMs = []
-    #TODO: remove all code except for the latest method, and test the latest method.
     for object_index in np.arange(number_of_objects):
 
         #get the current center of mass of this object
@@ -294,16 +308,10 @@ for iter_num in np.arange(max_number_of_iterations):
         draw_data.plt.colorbar()
         draw_data.plt.show()'''
 
-        #get axis in object coords around which object rotates
-        rotation_axis_index, rotation_axis_sign = object_angle_axes[object_index]
-
         #get angles
-        sim_minus_start = p_utils.quaternion_difference(orientation, start_orientation)
-        gt_minus_start = p_utils.quaternion_difference(orientation_gt, start_orientation)
-        sim_axis, sim_angle = p_utils.quaternion_to_axis_angle(sim_minus_start)
-        gt_axis, gt_angle = p_utils.quaternion_to_axis_angle(gt_minus_start)
-        sim_angle = rotation_axis_sign*sim_axis[2]*sim_angle
-        gt_angle = rotation_axis_sign*gt_axis[2]*gt_angle
+        rotation_axis_index = object_angle_axes[object_index][0]
+        sim_angle = sim_angles[object_index]
+        gt_angle = gt_angles[object_index]
 
 
         #get center of rotation for sim
@@ -319,7 +327,6 @@ for iter_num in np.arange(max_number_of_iterations):
         cor_gt_to_c_star = ground_truth_COMs[object_index] - cor_gt
         cor_gt_to_c_star = cor_gt_to_c_star / np.linalg.norm(cor_gt_to_c_star)
         print("are the paths from c to cor parallel?",np.dot(cor_gt_to_c_star, cor_to_c))
-        print()
 
         learning_rate = 0.03
         COM_changes = learning_rate*(sim_angle-gt_angle)*np.sign(sim_angle)*cor_to_c
@@ -369,9 +376,9 @@ for iter_num in np.arange(max_number_of_iterations):
             COM_changes *= COM_changes_magn_limit
 
 
-        print("\n\nchanges to COM:",COM_changes)
+        print("changes to COM:",COM_changes)
         path_to_go = ground_truth_COMs[object_index] - current_object_COM
-        print("path_to_go",path_to_go,"\n")
+        print("path_to_go",path_to_go,"")
 
         print("dot of COM changes and actual path",np.dot(COM_changes / np.linalg.norm(COM_changes), path_to_go / np.linalg.norm(path_to_go)))
         print("\tnow same thing, but ignoring the rotation axis",np.dot(COM_changes[1:] / np.linalg.norm(COM_changes[1:]), path_to_go[1:] / np.linalg.norm(path_to_go[1:])))
