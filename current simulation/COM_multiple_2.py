@@ -160,6 +160,15 @@ sim_start = time.perf_counter_ns()
 starting_data, ground_truth_movement_data = run_attempt(ground_truth_folder, point_1, point_2, True)
 #print("ground_truth_movement_data",ground_truth_movement_data)
 
+#get the object coordinates version of the world z-axis for each object
+object_angle_axes = []
+for i in np.arange(number_of_objects):
+    rotated_z_vector = p_utils.rotate_vector(np.array([0.,0.,1.]),p_utils.quat_inverse(starting_data[i][1]))
+    direction_index = np.argmax(np.abs(rotated_z_vector))
+    axis_sign = np.sign(rotated_z_vector[direction_index])
+    print("axis_sign",axis_sign)
+    object_angle_axes.append((direction_index, axis_sign))
+
 
 #generate random COMs
 current_COMs_list = []
@@ -170,7 +179,7 @@ for i in np.arange(number_of_objects):
 average_errors = []
 average_losses = []
 average_angle_errors = []
-avg_loss_threshold = 0.003
+avg_loss_threshold = 0.005
 
 
 #generate and run scenes with alternate COMs
@@ -201,7 +210,7 @@ for iter_num in np.arange(max_number_of_iterations):
         position_gt, orientation_gt = ground_truth_movement_data[i]
         axis, angle = p_utils.quaternion_to_axis_angle(p_utils.quaternion_difference(orientation, start_orientation))
         gt_axis, gt_angle = p_utils.quaternion_to_axis_angle(p_utils.quaternion_difference(orientation_gt, start_orientation))
-        average_angle_error += (angle - gt_angle)*180./np.pi
+        average_angle_error += (angle*axis[2] - gt_angle*gt_axis[2])*180./np.pi
     average_angle_error /= number_of_objects
     average_angle_errors.append(average_angle_error)
 
@@ -231,9 +240,10 @@ for iter_num in np.arange(max_number_of_iterations):
 
     #find new locations for the object COMs
     updated_COMs = []
+    #TODO: remove all code except for the latest method, and test the latest method.
     for object_index in np.arange(number_of_objects):
 
-        #get the center of mass of this object
+        #get the current center of mass of this object
         current_object_COM = current_COMs_list[object_index]
         print("current COM:", current_object_COM)
 
@@ -242,9 +252,85 @@ for iter_num in np.arange(max_number_of_iterations):
         position, orientation = this_scene_movement_data[object_index]
         position_gt, orientation_gt = ground_truth_movement_data[object_index]
 
-        #TODO want to transition to using angle differences. Main problem: do not know what angles. Need to work out equations before implementing.
+        '''#draw image
+        image_sim = np.zeros((100,100))
+        image_gt = np.zeros((100,100))
+        image = np.zeros((100,100))
+        image_1 = np.zeros((100,100))
+        image_2 = np.zeros((100,100))
+        image_3 = np.zeros((100,100))
+        com_x_range, com_y_range, com_z_range = object_type_com_bounds_and_test_points[object_types[object_index]]["com_bounds"]
+        img_scale = 0.02
+        for i in np.arange(100):
+            for j in np.arange(100):
+                test_point = np.array([-0.01, img_scale*(0.5*i-25.), img_scale*(0.5*j-25.)])
+                test_point_start = p_utils.get_world_space_point(test_point, start_position, start_orientation)
+                test_point_gt = p_utils.get_world_space_point(test_point, position_gt, orientation_gt)
+                test_point_sim = p_utils.get_world_space_point(test_point, position, orientation)
+                test_point_motion_sim = np.linalg.norm(test_point_sim - test_point_start)
+                test_point_motion_gt = np.linalg.norm(test_point_gt - test_point_start)
+                image_sim[i][j] = test_point_motion_sim
+                image_gt[i][j] = - test_point_motion_gt
+                image[i][j] = test_point_motion_sim - test_point_motion_gt
 
-        # current_COM_point_difference
+                if test_point[1] > com_y_range[0] and test_point[1] < com_y_range[1]:
+                    if abs(test_point[2] - com_z_range[0]) < 0.5*img_scale or abs(test_point[2] - com_z_range[1]) < 0.5*img_scale:
+                        image_sim[i][j] = 0.
+                        image_gt[i][j] = 0.
+                        image[i][j] = 0.
+                        #image_1[i][j] = 0.
+                        #image_2[i][j] = 0.
+                        #image_3[i][j] = 0.
+                if test_point[2] > com_z_range[0] and test_point[2] < com_z_range[1]:
+                    if abs(test_point[1] - com_y_range[0]) < 0.5*img_scale or abs(test_point[1] - com_y_range[1]) < 0.5*img_scale:
+                        image_sim[i][j] = 0.
+                        image_gt[i][j] = 0.
+                        image[i][j] = 0.
+                        #image_1[i][j] = 0.
+                        #image_2[i][j] = 0.
+                        #image_3[i][j] = 0.
+        
+        draw_data.plt.imshow(image, cmap='binary')
+        draw_data.plt.colorbar()
+        draw_data.plt.show()'''
+
+        #get axis in object coords around which object rotates
+        rotation_axis_index, rotation_axis_sign = object_angle_axes[object_index]
+
+        #get angles
+        sim_minus_start = p_utils.quaternion_difference(orientation, start_orientation)
+        gt_minus_start = p_utils.quaternion_difference(orientation_gt, start_orientation)
+        sim_axis, sim_angle = p_utils.quaternion_to_axis_angle(sim_minus_start)
+        gt_axis, gt_angle = p_utils.quaternion_to_axis_angle(gt_minus_start)
+        sim_angle = rotation_axis_sign*sim_axis[2]*sim_angle
+        gt_angle = rotation_axis_sign*gt_axis[2]*gt_angle
+
+
+        #get center of rotation for sim
+        cor, cor_val = p_utils.center_of_rotation_2(rotation_axis_index, current_object_COM[rotation_axis_index], start_position, start_orientation, position, orientation)
+        print("sim:",cor, cor_val)
+        #get center of rotation for gt
+        cor_gt, cor_gt_val = p_utils.center_of_rotation_2(rotation_axis_index, current_object_COM[rotation_axis_index], start_position, start_orientation, position_gt, orientation_gt)
+        print("gt:",cor_gt, cor_gt_val)
+
+        cor_to_c = current_object_COM - cor
+        cor_to_c = cor_to_c / np.linalg.norm(cor_to_c)
+
+        cor_gt_to_c_star = ground_truth_COMs[object_index] - cor_gt
+        cor_gt_to_c_star = cor_gt_to_c_star / np.linalg.norm(cor_gt_to_c_star)
+        print("are the paths from c to cor parallel?",np.dot(cor_gt_to_c_star, cor_to_c))
+        print()
+
+        learning_rate = 0.03
+        COM_changes = learning_rate*(sim_angle-gt_angle)*np.sign(sim_angle)*cor_to_c
+
+
+        #assume motion is planar without flipping.
+        #TODO plan regarding flipping:
+        # if it occurs in an object, find the coordinates of its simulated COM, look for the one closest to the edge, and move that coordinate towards the center.
+
+
+        '''# current_COM_point_difference
         current_object_COM_world_coords_start = p_utils.get_world_space_point(current_object_COM, start_position, start_orientation)
         current_object_COM_world_coords_sim = p_utils.get_world_space_point(current_object_COM, position, orientation)
         current_object_COM_world_coords_gt = p_utils.get_world_space_point(current_object_COM, position_gt, orientation_gt)
@@ -253,7 +339,6 @@ for iter_num in np.arange(max_number_of_iterations):
 
         # get motions of each test point in ground truth and current scene
         test_point_differences = []
-        alt_tpd = []
         test_points = object_type_com_bounds_and_test_points[object_types[object_index]]["test_points"]
         for test_point in test_points:
             test_point_start = p_utils.get_world_space_point(test_point, start_position, start_orientation)
@@ -262,7 +347,6 @@ for iter_num in np.arange(max_number_of_iterations):
             test_point_motion_sim = np.linalg.norm(test_point_sim - test_point_start)
             test_point_motion_gt = np.linalg.norm(test_point_gt - test_point_start)
             test_point_differences.append(test_point_motion_sim - current_object_COM_motion_sim - (test_point_motion_gt - current_object_COM_motion_gt))
-            alt_tpd.append(test_point_motion_sim - test_point_motion_gt)
 
         #TODO consider saving previous simulations, so if two COM candidates are encountered with changes pointing towards each other, we can look at a weighted average COM immediately.
 
@@ -274,21 +358,8 @@ for iter_num in np.arange(max_number_of_iterations):
             diff_dir =  np.sign(diff)#diff / np.linalg.norm(diff)
             COM_changes -= diff_dir * 10.*(0.9**iter_num)*test_point_differences[i]
 
-        alt_COM_changes = np.array([0.,0.,0.])
-        for i in np.arange(num_test_points_per_object):
-            diff = current_object_COM - test_points[i]
-            diff_dir =  np.sign(diff)#diff / np.linalg.norm(diff)
-            alt_COM_changes -= diff_dir * 10.*(0.9**iter_num)*alt_tpd[i]
-
         #divide COM changes by the number of test points
-        COM_changes /= num_test_points_per_object
-        alt_COM_changes /= num_test_points_per_object
-
-        print("COM_changes:",COM_changes)
-        print("alt_COM_changes:",alt_COM_changes)
-        print("Dot product between the two possible COM_changes:", np.dot(COM_changes / np.linalg.norm(COM_changes), alt_COM_changes / np.linalg.norm(alt_COM_changes)))
-        print("Magnitudes for comparison:", np.linalg.norm(COM_changes), np.linalg.norm(alt_COM_changes))
-        print()
+        COM_changes /= num_test_points_per_object'''
 
         #clamp COM changes. TODO: consider a more principled way of doing this
         COM_changes_magn = np.linalg.norm(COM_changes)
@@ -297,13 +368,13 @@ for iter_num in np.arange(max_number_of_iterations):
             COM_changes /= COM_changes_magn
             COM_changes *= COM_changes_magn_limit
 
-        #damp COM changes
-        #COM_changes *= 0.9 ** iter_num
 
-        print("changes to COM:",COM_changes)
+        print("\n\nchanges to COM:",COM_changes)
         path_to_go = ground_truth_COMs[object_index] - current_object_COM
+        print("path_to_go",path_to_go,"\n")
+
         print("dot of COM changes and actual path",np.dot(COM_changes / np.linalg.norm(COM_changes), path_to_go / np.linalg.norm(path_to_go)))
-        #print("dot of new method and actual path", np.dot(direction_new_method / np.linalg.norm(direction_new_method), path_to_go / np.linalg.norm(path_to_go)))
+        print("\tnow same thing, but ignoring the rotation axis",np.dot(COM_changes[1:] / np.linalg.norm(COM_changes[1:]), path_to_go[1:] / np.linalg.norm(path_to_go[1:])))
 
         #define new COM for this object
         new_COM = current_object_COM + COM_changes

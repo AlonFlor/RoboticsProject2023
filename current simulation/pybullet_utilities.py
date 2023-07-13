@@ -246,6 +246,12 @@ def rotate_vector(vec, quat):
     result = quaternion_multiplication(qP, quat_inv)
     return result[:3]
 
+def jacobian_of_rotate_vector(quat):
+    row_0 = rotate_vector(np.array([1.,0.,0.]), quat)
+    row_1 = rotate_vector(np.array([0.,1.,0.]), quat)
+    row_2 = rotate_vector(np.array([0.,0.,1.]), quat)
+    return np.array((row_0,row_1,row_2))
+
 def generate_point(x_range, y_range, z_range):
     return np.array([random.uniform(x_range[0], x_range[1]), random.uniform(y_range[0], y_range[1]), random.uniform(z_range[0], z_range[1])])
 
@@ -258,7 +264,7 @@ def get_world_space_point(point, position, orientation):
 def get_object_space_point(point, position, orientation):
     return rotate_vector(point-position, quat_inverse(orientation))
 
-def center_of_rotation(test_points_object_coords, start_position, start_orientation, position, orientation):
+'''def center_of_rotation(test_points_object_coords, start_position, start_orientation, position, orientation):
     num_test_points = len(test_points_object_coords) #should be 3
 
     #get the test points in world coordinates
@@ -286,11 +292,68 @@ def center_of_rotation(test_points_object_coords, start_position, start_orientat
         test_point_plane_coefficients[i] = plane_normal
         test_point_plane_rhs[i] = plane_rhs
     try:
+        print("Data to work with:",test_point_plane_coefficients, test_point_plane_rhs)
+        #print("Error:",np.matmul(np.linalg.lstsq(test_point_plane_coefficients, test_point_plane_rhs)[0], test_point_plane_coefficients)-test_point_plane_rhs)
+        #print("Relative Error:",(np.matmul(np.linalg.lstsq(test_point_plane_coefficients, test_point_plane_rhs)[0], test_point_plane_coefficients)-test_point_plane_rhs)
+        #      / test_point_plane_rhs)
+        print("info:",np.linalg.lstsq(test_point_plane_coefficients, test_point_plane_rhs))
         return np.linalg.lstsq(test_point_plane_coefficients, test_point_plane_rhs)[0]
     except np.linalg.LinAlgError:
         print("returning none")
-        return None
+        return None'''
 
+
+def center_of_rotation_helper(test_point, start_position, start_orientation, position, orientation):
+    test_point_start = get_world_space_point(test_point, start_position, start_orientation)
+    test_point_sim = get_world_space_point(test_point, position, orientation)
+    return np.linalg.norm(test_point_sim - test_point_start)
+
+def center_of_rotation_helper_1(min_range, max_range, index, index_unused_axis, value_unused_axis, start_position, start_orientation, position, orientation):
+    test_point_min = np.array([min_range, min_range, min_range])
+    test_point_max = np.array([min_range, min_range, min_range])
+    test_point_max[index] = max_range
+    test_point_min[index_unused_axis] = value_unused_axis
+    test_point_max[index_unused_axis] = value_unused_axis
+
+    test_point_min_val = center_of_rotation_helper(test_point_min, start_position, start_orientation, position, orientation)
+    test_point_max_val = center_of_rotation_helper(test_point_max, start_position, start_orientation, position, orientation)
+
+    if test_point_min_val == 0.:
+        return min_range
+    elif test_point_max_val == 0.:
+        return max_range
+
+    #binary search
+    mid_range = 0.
+    while test_point_max[index] - test_point_min[index] > 0.00001:
+        mid_range = 0.5 * (test_point_min[index] + test_point_max[index])
+        test_point = np.array([min_range, min_range, min_range])
+        test_point[index] = mid_range
+        test_point[index_unused_axis] = value_unused_axis
+        test_point_val = center_of_rotation_helper(test_point, start_position, start_orientation, position, orientation)
+        #function is a hyperbola, symmetric around the minimum, so the test point with the higher value is further from the target
+        if test_point_min_val > test_point_max_val:
+            test_point_min = test_point
+            test_point_min_val = test_point_val
+        elif test_point_min_val < test_point_max_val:
+            test_point_max = test_point
+            test_point_max_val = test_point_val
+        else:
+            return mid_range
+    return mid_range
+
+def center_of_rotation_2(index_unused_axis, value_unused_axis, start_position, start_orientation, position, orientation):
+    min_range = -0.5
+    max_range = 0.5
+    values = []
+    for i in np.arange(3):
+        if i != index_unused_axis:
+            values.append(center_of_rotation_helper_1(min_range, max_range, i, index_unused_axis, value_unused_axis, start_position, start_orientation, position, orientation))
+        else:
+            values.append(value_unused_axis)
+    test_point = np.array(values)
+    test_point_val = center_of_rotation_helper(test_point, start_position, start_orientation, position, orientation)
+    return test_point, test_point_val
 
 
 
