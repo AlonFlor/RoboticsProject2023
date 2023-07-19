@@ -67,8 +67,8 @@ def combine_images(image_1_path, image_2_path, new_image_path):
     new_image.save(new_image_path)
 
 
-def make_video(test_dir,imgs_dir, prefix="", fps=24):
-    video_path = os.path.join(test_dir,"video.mp4")
+def make_video(test_dir,imgs_dir, prefix="", fps=24, video_name="video"):
+    video_path = os.path.join(test_dir,video_name+".mp4")
     command = f"ffmpeg.exe -framerate {fps} -i " + os.path.join(imgs_dir,prefix+"%04d.png") + " -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p " + video_path
     os.popen(command)
 
