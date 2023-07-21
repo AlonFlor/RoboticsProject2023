@@ -6,6 +6,9 @@ import numpy as np
 import draw_data
 import time
 
+#p_utils.save_scene_with_shifted_COMs(os.path.join("scenes","scene_one_box_2_ed.csv"),os.path.join("scenes","scene_one_box_2_ed_2.csv"),[np.array([-0.01,-0.01,0.08])])
+#exit()
+
 
 physicsClient = p.connect(p.DIRECT)
 #physicsClient = p.connect(p.GUI)
@@ -39,9 +42,14 @@ def get_pushing_points(point_1_basic, point_2_basic):
     return point_1, point_2
 
 pushing_scenarios = []
-pushing_scenarios.append(get_pushing_points(np.array([0.2,-0.05,0.]), np.array([-0.3,-0.05,0.])))
-pushing_scenarios.append(get_pushing_points(np.array([0.,0.15,0.]), np.array([0.,-0.3,0.])))
-#np.array([0.15,0.,0.])
+#pushing_scenarios.append(get_pushing_points(np.array([0.2,-0.05,0.]), np.array([-0.3,-0.05,0.])))
+#pushing_scenarios.append(get_pushing_points(np.array([0.,0.15,0.]), np.array([0.,-0.3,0.])))
+
+pushing_scenarios.append(get_pushing_points(np.array([0.2,0.,0.]), np.array([-0.2,0.,0.])))
+pushing_scenarios.append(get_pushing_points(np.array([0.05,0.4,0.]), np.array([0.05,-0.3,0.])))
+pushing_scenarios.append(get_pushing_points(np.array([-0.05,-0.35,0.]), np.array([-0.05,0.3,0.])))
+
+#pushing_scenarios.append(get_pushing_points(np.array([0.05,0.2,0.]), np.array([0.05,-0.3,0.])))
 
 
 #TODO maybe read test points off of a file????
@@ -65,10 +73,10 @@ object_type_com_bounds_and_test_points["mustard_bottle"] = p_utils.get_com_bound
 
 
 #define scene, number of objects in that scene, and number of iterations
-#original_scene_loc = os.path.join("scenes","four_items.csv")
-#original_scene_loc = os.path.join("scenes","scene_boxes_with_different_COMs.csv")
-original_scene_loc = os.path.join("scenes","scene_COM_overlay_one_object.csv")
-number_of_objects = 1#4
+#original_scene_loc = os.path.join("scenes","scene_COM_overlay_one_object.csv")
+original_scene_loc = os.path.join("scenes","scene_multi_boxes.csv")
+#original_scene_loc = os.path.join("scenes","scene_one_box.csv")
+number_of_objects = 4
 max_number_of_iterations = 50
 
 
@@ -128,6 +136,8 @@ def run_attempt(scene_folder, pushing_scenario_index, point_1, point_2, get_star
     p.resetBasePositionAndOrientation(cylinderID, point_1, (0., 0., 0., 1.))
     p_utils.print_image(view_matrix, proj_matrix, push_folder, extra_message="0_before")
     p_utils.push(point_2, cylinderID, dt, time_out=2.)
+    #p_utils.push(point_2, cylinderID, dt, mobile_object_IDs = mobile_object_IDs, fps = 24, view_matrix = view_matrix, proj_matrix = proj_matrix,
+    #             imgs_dir = push_folder, available_image_num = 0, motion_script = None, time_out=2.)
     p_utils.print_image(view_matrix, proj_matrix, push_folder, extra_message="1_after")
 
     #get data after push and reset simulation
@@ -250,8 +260,12 @@ for iter_num in np.arange(max_number_of_iterations):
             gt_minus_start = p_utils.quaternion_difference(orientation_gt, start_orientation)
             sim_axis, sim_angle = p_utils.quaternion_to_axis_angle(sim_minus_start)
             gt_axis, gt_angle = p_utils.quaternion_to_axis_angle(gt_minus_start)
+            #print(f"base axis angle for push{pushing_scenario_index}:\t\tsim:{sim_axis},{sim_angle}\t\tgt:{gt_axis},{gt_angle}")
             sim_angle = rotation_axis_sign*sim_axis[2]*sim_angle
             gt_angle = rotation_axis_sign*gt_axis[2]*gt_angle
+            sim_angle = p_utils.restricted_angle_range(sim_angle)
+            gt_angle = p_utils.restricted_angle_range(gt_angle)
+
 
             sim_angles[-1].append(sim_angle)
             gt_angles[-1].append(gt_angle)
@@ -269,7 +283,7 @@ for iter_num in np.arange(max_number_of_iterations):
         current_COM_planar = current_COMs_list[object_index] + np.array([0.,0.,0.])
         current_COM_planar[rotation_axis_index]=0.
         error = np.linalg.norm(ground_truth_COM_planar - current_COM_planar)
-        print(error,"\t\t", current_COMs_list[object_index], "\t\t", ground_truth_COMs[object_index])
+        print("\t",error,"\t\t", current_COMs_list[object_index], "\t\t", ground_truth_COMs[object_index])
         average_error += error
     average_error /= number_of_objects
     average_errors.append(average_error)
@@ -305,39 +319,60 @@ for iter_num in np.arange(max_number_of_iterations):
             position_gt, orientation_gt = ground_truth_movement_data[pushing_scenario_index][object_index]
 
             #get angles
-            rotation_axis_index = object_angle_axes[object_index][0]
+            rotation_axis_index, rotation_axis_sign = object_angle_axes[object_index]
             sim_angle = sim_angles[pushing_scenario_index][object_index]
             gt_angle = gt_angles[pushing_scenario_index][object_index]
 
+
             #get center of rotation for sim
-            cor, cor_val = p_utils.center_of_rotation_2(rotation_axis_index, current_object_COM[rotation_axis_index], start_position, start_orientation, position, orientation)
+            cor, cor_val = p_utils.planar_center_of_rotation(sim_angle, rotation_axis_sign, start_position, start_orientation, position, orientation)
+            print("cor",cor,"\t\tcor_val",cor_val)
             #get center of rotation for gt
-            cor_gt, cor_gt_val = p_utils.center_of_rotation_2(rotation_axis_index, current_object_COM[rotation_axis_index], start_position, start_orientation, position_gt, orientation_gt)
+            cor_gt, cor_gt_val = p_utils.planar_center_of_rotation(gt_angle, rotation_axis_sign, start_position, start_orientation, position_gt, orientation_gt)
+            print("cor_gt",cor_gt,"\t\tcor_gt_val",cor_gt_val)
 
             #get the u vector, see paper for its use
             cor_to_c = current_object_COM - cor
+            cor_to_c[rotation_axis_index] = 0.
             cor_to_c = cor_to_c / np.linalg.norm(cor_to_c)
             u =  np.sign(sim_angle)*cor_to_c
 
+            #get the u vector for the ground truth to see if it matches
+            cor_gt_to_c_star = ground_truth_COMs[object_index] - cor_gt
+            cor_gt_to_c_star[rotation_axis_index] = 0.
+            cor_gt_to_c_star = cor_gt_to_c_star / np.linalg.norm(cor_gt_to_c_star)
+            print("u parallel???",np.dot(cor_to_c, cor_gt_to_c_star))
+
+
+            print("u", u, "sim_angle-gt_angle",sim_angle-gt_angle)
+
             #update COM changes
             learning_rate = 0.03
+            #print("sim_angle,gt_angle",sim_angle,gt_angle)
             COM_changes += learning_rate*(sim_angle-gt_angle)*u
             print(learning_rate*(sim_angle-gt_angle)*u)
 
-        #clamp COM changes. TODO: consider a more principled way of doing this
+            #is_correct_push_dir
+
+            '''diff_of_CORs = cor_gt - cor
+            diff_of_CORs[rotation_axis_index] = 0.
+            diff_of_CORs_perp_u = diff_of_CORs - np.dot(diff_of_CORs,u)*u
+            COM_changes += learning_rate*diff_of_CORs_perp_u
+            print(learning_rate*diff_of_CORs_perp_u)'''
+
+        '''#clamp COM changes. TODO: consider a more principled way of doing this
         COM_changes_magn = np.linalg.norm(COM_changes)
         COM_changes_magn_limit = 0.03
         if COM_changes_magn > COM_changes_magn_limit:
             COM_changes /= COM_changes_magn
-            COM_changes *= COM_changes_magn_limit
+            COM_changes *= COM_changes_magn_limit'''
 
 
-        print("changes to COM:",COM_changes)
+        print("\nchanges to COM:",COM_changes)
         path_to_go = ground_truth_COMs[object_index] - current_object_COM
         print("path_to_go",path_to_go,"")
 
         print("dot of COM changes and actual path",np.dot(COM_changes / np.linalg.norm(COM_changes), path_to_go / np.linalg.norm(path_to_go)))
-        print("\tnow same thing, but ignoring the rotation axis",np.dot(COM_changes[1:] / np.linalg.norm(COM_changes[1:]), path_to_go[1:] / np.linalg.norm(path_to_go[1:])))
 
         #define new COM for this object
         new_COM = current_object_COM + COM_changes
@@ -395,6 +430,6 @@ for push_num in np.arange(len(pushing_scenarios)):
                                os.path.join(test_dir,try_folder_name,f"push_{push_num}","1_after.png"),
                                os.path.join(imgs_dir,try_folder_name+".png"))
 
-    p_utils.make_video(test_dir, imgs_dir, "try_", 8,f"push_{push_num}")
+    p_utils.make_video(test_dir, imgs_dir, "try_", 8, f"push_{push_num}")
 
 p.disconnect()

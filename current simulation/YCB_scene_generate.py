@@ -64,7 +64,8 @@ for i in range(3):
 
 
 available_objects = ["cracker_box", "pudding_box", "master_chef_can", "adjustable_wrench", "mustard_bottle"]
-number_of_each_object = [1, 1, 1, 1, 0]
+#number_of_each_object = [1, 1, 1, 1, 0]
+number_of_each_object = [4, 0, 0, 0, 0]
 object_COMs = [(-0.01,-0.01,0.08), (0.0,0.0,0.015), (-0.015,-0.01,0.06),  (0.01,-0.05,0.005), (-0.015,-0.023,0.07)]
 #generate objects with different COMs
 for i in range(len(available_objects)):
@@ -102,6 +103,15 @@ p_utils.save_scene_no_bin(os.path.join(test_dir,"saved_scene.csv"), mobile_objec
 #print an image of the scene
 p_utils.print_image(view_matrix, proj_matrix, test_dir, None, "scene_img")
 
+orns = []
+for object_id in mobile_object_IDs:
+    pos, orn = p.getBasePositionAndOrientation(object_id)
+    orns.append(orn)
+for i in np.arange(len(orns)):
+    orn1 = orns[i-1]
+    orn2 = orns[i]
+    diff = p_utils.quaternion_difference(orn2,orn1)
+    print(p_utils.quaternion_to_axis_angle(diff))
 
 p.disconnect()
 
