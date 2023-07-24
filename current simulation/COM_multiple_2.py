@@ -48,8 +48,14 @@ pushing_scenarios = []
 pushing_scenarios.append(get_pushing_points(np.array([0.2,0.,0.]), np.array([-0.2,0.,0.])))
 pushing_scenarios.append(get_pushing_points(np.array([0.05,0.4,0.]), np.array([0.05,-0.3,0.])))
 pushing_scenarios.append(get_pushing_points(np.array([-0.05,-0.35,0.]), np.array([-0.05,0.3,0.])))
+pushing_scenarios.append(get_pushing_points(np.array([0.3,0.3,0.]), np.array([-0.3,0.3,0.])))
 
 #pushing_scenarios.append(get_pushing_points(np.array([0.05,0.2,0.]), np.array([0.05,-0.3,0.])))
+
+#pushing_scenarios.append(get_pushing_points(np.array([0.3,0.,0.]), np.array([-0.3,0.,0.])))
+#pushing_scenarios.append(get_pushing_points(np.array([-0.3,-0.2,0.]), np.array([0.3,-0.2,0.])))
+#pushing_scenarios.append(get_pushing_points(np.array([0.15,-0.35,0.]), np.array([0.15,0.3,0.])))
+#pushing_scenarios.append(get_pushing_points(np.array([-0.1,0.15,0.]), np.array([-0.1,-0.15,0.])))
 
 
 #TODO maybe read test points off of a file????
@@ -74,8 +80,9 @@ object_type_com_bounds_and_test_points["mustard_bottle"] = p_utils.get_com_bound
 
 #define scene, number of objects in that scene, and number of iterations
 #original_scene_loc = os.path.join("scenes","scene_COM_overlay_one_object.csv")
-original_scene_loc = os.path.join("scenes","scene_multi_boxes.csv")
 #original_scene_loc = os.path.join("scenes","scene_one_box.csv")
+original_scene_loc = os.path.join("scenes","scene_multi_boxes.csv")
+#original_scene_loc = os.path.join("scenes","scene_multi_boxes_cluttered_closely.csv")
 number_of_objects = 4
 max_number_of_iterations = 50
 
@@ -89,7 +96,7 @@ file_handling.copy_file(original_scene_loc, ground_truth_scene_loc)
 
 
 def get_loss_for_object(data_sim, data_gt, test_points):
-    '''Calculate the loss as the sum of distances between simulated and ground truth for three test points (x,y,z) for the object.'''
+    '''Calculate the planar loss as the sum of distances between simulated and ground truth for test points for the object.'''
     loss = 0.
     pos, orn = data_sim
     pos_gt, orn_gt = data_gt
@@ -97,7 +104,7 @@ def get_loss_for_object(data_sim, data_gt, test_points):
     for test_point in test_points:
         test_point_world_coords = p_utils.get_world_space_point(test_point, pos, orn)
         test_point_gt_world_coords = p_utils.get_world_space_point(test_point, pos_gt, orn_gt)
-        loss += np.linalg.norm(test_point_world_coords-test_point_gt_world_coords)
+        loss += np.linalg.norm(test_point_world_coords[:2]-test_point_gt_world_coords[:2])
 
     return loss
 
@@ -116,6 +123,20 @@ def get_objects_positions_and_orientations(mobile_object_IDs):
         sim_data.append((position_of_model_origin, orientation))
 
     return sim_data
+
+
+
+def display_COMs(mobile_object_IDs, sim_data):
+    for i in np.arange(len(mobile_object_IDs)):
+        object_id = mobile_object_IDs[i]
+        pos, orn = sim_data[i]
+
+        COM_display_point = p.getDynamicsInfo(object_id, -1)[3]
+        COM_display_point_wc = p_utils.get_world_space_point(COM_display_point, pos, orn)
+
+        COM_display_point_wc[2] = 0.1   #move com point up so it can be displayed above its target object TODO will need to be higher for objects other than cracker box
+        COM_display_shape = p.createVisualShape(p.GEOM_SPHERE, radius=0.01, rgbaColor=(0.,0.,0.,1.))
+        p.createMultiBody(baseVisualShapeIndex = COM_display_shape, basePosition=COM_display_point_wc)
 
 
 
@@ -138,10 +159,11 @@ def run_attempt(scene_folder, pushing_scenario_index, point_1, point_2, get_star
     p_utils.push(point_2, cylinderID, dt, time_out=2.)
     #p_utils.push(point_2, cylinderID, dt, mobile_object_IDs = mobile_object_IDs, fps = 24, view_matrix = view_matrix, proj_matrix = proj_matrix,
     #             imgs_dir = push_folder, available_image_num = 0, motion_script = None, time_out=2.)
-    p_utils.print_image(view_matrix, proj_matrix, push_folder, extra_message="1_after")
 
     #get data after push and reset simulation
     sim_data = get_objects_positions_and_orientations(mobile_object_IDs)
+    display_COMs(mobile_object_IDs, sim_data)
+    p_utils.print_image(view_matrix, proj_matrix, push_folder, extra_message="1_after")
     p.resetSimulation()
     p.setGravity(0, 0, -9.8)
 
@@ -207,6 +229,7 @@ for i in np.arange(number_of_objects):
     generated_com = p_utils.generate_point(com_x_range, com_y_range, com_z_range)
     rotation_axis_index = object_angle_axes[i][0]
     generated_com[rotation_axis_index] = 0.5*(com_x_range[0] + com_x_range[1]) #the guess for COM along the rotation axis is in the middle of the range.
+    # TODO generalize this instead of assuming that the x axis is the object-coordinates rotation axis
 
     current_COMs_list.append(generated_com)
 
@@ -312,6 +335,7 @@ for iter_num in np.arange(max_number_of_iterations):
         print("current COM:", current_object_COM)
 
         COM_changes = np.array([0.,0.,0.])
+        path_to_go = ground_truth_COMs[object_index] - current_object_COM
         for pushing_scenario_index in np.arange(len(pushing_scenarios)):
             #get position and orientation data
             start_position, start_orientation = starting_data[pushing_scenario_index][object_index]
@@ -323,7 +347,6 @@ for iter_num in np.arange(max_number_of_iterations):
             sim_angle = sim_angles[pushing_scenario_index][object_index]
             gt_angle = gt_angles[pushing_scenario_index][object_index]
 
-
             #get center of rotation for sim
             cor, cor_val = p_utils.planar_center_of_rotation(sim_angle, rotation_axis_sign, start_position, start_orientation, position, orientation)
             print("cor",cor,"\t\tcor_val",cor_val)
@@ -334,45 +357,38 @@ for iter_num in np.arange(max_number_of_iterations):
             #get the u vector, see paper for its use
             cor_to_c = current_object_COM - cor
             cor_to_c[rotation_axis_index] = 0.
-            cor_to_c = cor_to_c / np.linalg.norm(cor_to_c)
+            cor_to_c /= np.linalg.norm(cor_to_c)
             u =  np.sign(sim_angle)*cor_to_c
 
             #get the u vector for the ground truth to see if it matches
             cor_gt_to_c_star = ground_truth_COMs[object_index] - cor_gt
             cor_gt_to_c_star[rotation_axis_index] = 0.
-            cor_gt_to_c_star = cor_gt_to_c_star / np.linalg.norm(cor_gt_to_c_star)
-            print("u parallel???",np.dot(cor_to_c, cor_gt_to_c_star))
+            cor_gt_to_c_star /= np.linalg.norm(cor_gt_to_c_star)
+            print("\t\tu parallel???",np.dot(cor_to_c, cor_gt_to_c_star))
 
-
-            print("u", u, "sim_angle-gt_angle",sim_angle-gt_angle)
+            #print("u", u, "sim_angle-gt_angle",sim_angle-gt_angle)
 
             #update COM changes
             learning_rate = 0.03
             #print("sim_angle,gt_angle",sim_angle,gt_angle)
-            COM_changes += learning_rate*(sim_angle-gt_angle)*u
-            print(learning_rate*(sim_angle-gt_angle)*u)
+            single_push_COM_change = learning_rate*(sim_angle-gt_angle)*u
+            COM_changes += single_push_COM_change
+            #print(single_push_COM_change)
 
-            #is_correct_push_dir
-
-            '''diff_of_CORs = cor_gt - cor
-            diff_of_CORs[rotation_axis_index] = 0.
-            diff_of_CORs_perp_u = diff_of_CORs - np.dot(diff_of_CORs,u)*u
-            COM_changes += learning_rate*diff_of_CORs_perp_u
-            print(learning_rate*diff_of_CORs_perp_u)'''
-
-        '''#clamp COM changes. TODO: consider a more principled way of doing this
-        COM_changes_magn = np.linalg.norm(COM_changes)
-        COM_changes_magn_limit = 0.03
-        if COM_changes_magn > COM_changes_magn_limit:
-            COM_changes /= COM_changes_magn
-            COM_changes *= COM_changes_magn_limit'''
+            actual_change_direction = np.dot(path_to_go,u)*u
+            actual_change_direction /= np.linalg.norm(actual_change_direction)
+            single_push_COM_change_direction = single_push_COM_change / np.linalg.norm(single_push_COM_change)
+            print("\t\tcorrect direction?\t", np.dot(actual_change_direction, single_push_COM_change_direction))
+            print("\t\tchange amount", np.linalg.norm(single_push_COM_change))
+            print("\t\tsim movement amount\tangle =",sim_angle,"\tdisplacement size=",np.linalg.norm(position[:2]-start_position[:2]))
+            print("\t\tgt movement amount\tangle =",gt_angle,"\tdisplacement size=",np.linalg.norm(position_gt[:2]-start_position[:2]))
 
 
         print("\nchanges to COM:",COM_changes)
-        path_to_go = ground_truth_COMs[object_index] - current_object_COM
         print("path_to_go",path_to_go,"")
 
-        print("dot of COM changes and actual path",np.dot(COM_changes / np.linalg.norm(COM_changes), path_to_go / np.linalg.norm(path_to_go)))
+        dot_COM_actual = np.dot(COM_changes / np.linalg.norm(COM_changes), path_to_go / np.linalg.norm(path_to_go))
+        print("dot of COM changes and actual path",dot_COM_actual)
 
         #define new COM for this object
         new_COM = current_object_COM + COM_changes

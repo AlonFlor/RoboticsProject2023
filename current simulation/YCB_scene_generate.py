@@ -36,7 +36,7 @@ def create_obj(object_type, com, position, orientation):
 
 point_x_range = (-0.2,0.2)
 point_y_range = (-0.2,0.2)
-point_z_range = (0.2, 0.3)
+point_z_range = (0.05,0.06)#(0.2, 0.3)
 
 '''#create a cracker box object with the COM that I prefer
 position = p_utils.generate_point(point_x_range,point_y_range,point_z_range)
@@ -71,7 +71,7 @@ object_COMs = [(-0.01,-0.01,0.08), (0.0,0.0,0.015), (-0.015,-0.01,0.06),  (0.01,
 for i in range(len(available_objects)):
     for j in range(number_of_each_object[i]):
         position = p_utils.generate_point(point_x_range, point_y_range, point_z_range)
-        orientation = p.getQuaternionFromEuler((0., np.pi / 2, p_utils.generate_num((0., 2. * np.pi))))
+        orientation = p.getQuaternionFromEuler((0., np.pi / 2, 0.))#p_utils.generate_num((0., 2. * np.pi))))
         if available_objects[i]=="master_chef_can":
             orientation = p.getQuaternionFromEuler((0.,0.,0.))
         #com_x_range, com_y_range, com_z_range = object_type_com_bounds_and_test_points[available_objects[i]]["com_bounds"]
