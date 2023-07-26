@@ -39,7 +39,8 @@ object_type_com_bounds_and_test_points["mustard_bottle"] = p_utils.get_com_bound
 
 # assume motion is planar without flipping.
 # TODO plan regarding flipping:
-# if it occurs in an object, find the coordinates of its simulated COM, look for the one closest to the edge, and move that coordinate towards the center.
+#  if it occurs in an object, find the coordinates of its simulated COM, look for the one closest to the edge, and move that coordinate towards the center.
+#  flipping does not happen if the COMs are far away from the edges of the objects.
 
 
 #define pushing data
@@ -116,8 +117,8 @@ def make_pushing_scenarios_and_get_object_rotation_axes(scene_folder):
     center_point[axis1_index] = 0.5*(axis1_min + axis1_max)
     midpoints_to_center_vectors = [center_point - midpoint for midpoint in midpoints]
     midpoints_to_center_vectors_normed = [midpoints_to_center_vector / np.linalg.norm(midpoints_to_center_vector) for midpoints_to_center_vector in midpoints_to_center_vectors]
-    adjusted_midpoints = [midpoints[i] - 0.1*midpoints_to_center_vectors_normed[i] for i in np.arange(4)]
-    adjusted_midpoints_wc = [p_utils.get_world_space_point(adjusted_midpoint, target_pos, target_orn) for adjusted_midpoint in adjusted_midpoints]
+    adjusted_midpoints = [midpoints[i] - 0.1*midpoints_to_center_vectors_normed[i] for i in np.arange(4)]   #distance of 0.1 is because COM bounds are partially inside the objects
+    adjusted_midpoints_wc = [p_utils.get_world_space_point(adjusted_midpoint, target_pos, target_orn) for adjusted_midpoint in adjusted_midpoints] #transform to world coords
 
     #filter these points based on if the pusher can fit in there
     cylinderID = p_utils.create_cylinder(0.015 / 2, 0.05)
@@ -279,13 +280,18 @@ for i in np.arange(number_of_objects):
     range_sum = ranges_list[rotation_axis_index][0] + ranges_list[rotation_axis_index][1]
     generated_com[rotation_axis_index] = 0.5*range_sum #the guess for COM along the rotation axis is in the middle of that axis's COM range.
 
-    current_COMs_list.append(generated_com)
+    #let's see what happens if all non-target objects have the correct COM.
+    #TODO either remove this or formally accept it into the paper
+    if i==0:
+        current_COMs_list.append(generated_com)
+    else:
+        current_COMs_list.append(ground_truth_COMs[i])
 
 
 average_errors = []
 average_losses = []
 average_angle_errors = []
-avg_loss_threshold = 0.005
+avg_loss_threshold = 0.003#5
 
 
 #generate and run scenes with alternate COMs
